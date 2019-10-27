@@ -40,7 +40,9 @@
 
 #define NX_DETAIL_REGISTER_TEST2(function, ...)                                   \
     static void function();                                                       \
-    static struct _nx_register##function                                          \
+    namespace                                                                     \
+    {                                                                             \
+    struct _nx_register##function                                                 \
     {                                                                             \
         _nx_register##function()                                                  \
         {                                                                         \
@@ -48,6 +50,7 @@
             ::nx::detail::build_test(__FILE__, __LINE__, &function, __VA_ARGS__); \
         }                                                                         \
     } _nx_obj_register##function;                                                 \
+    }                                                                             \
     static void function()
 
 namespace nx

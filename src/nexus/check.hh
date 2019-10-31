@@ -19,12 +19,12 @@
 
 // ================= Implementation =================
 
-#define NX_IMPL_CHECK(terminate, ...)                                                          \
-    do                                                                                         \
-    {                                                                                          \
-        ::nx::detail::check_result r = ::nx::detail::start_check{} < __VA_ARGS__;              \
-        if (!r.is_true)                                                                        \
-            ::nx::detail::report_failed_check(r, #__VA_ARGS__, __FILE__, __LINE__, terminate); \
+#define NX_IMPL_CHECK(terminate, ...)                                                                          \
+    do                                                                                                         \
+    {                                                                                                          \
+        ::nx::detail::check_result r = ::nx::detail::start_check{} < __VA_ARGS__;                              \
+        if (!r.is_true)                                                                                        \
+            ::nx::detail::report_failed_check(r, #__VA_ARGS__, __FILE__, __LINE__, CC_PRETTY_FUNC, terminate); \
     } while (0)
 
 #define NX_IMPL_FORBID_COMPLEX_CHAIN                                                                                                   \
@@ -115,5 +115,5 @@ struct start_check
     }
 };
 
-void report_failed_check(check_result const& r, char const* check, char const* file, int line, bool terminate);
+void report_failed_check(check_result const& r, char const* check, char const* file, int line, char const* function, bool terminate);
 }

@@ -7,9 +7,11 @@
 
 using namespace nx;
 
-static cc::vector<cc::unique_ptr<Test>> sAllTests;
-
-cc::vector<cc::unique_ptr<Test>> const& nx::detail::get_all_tests() { return sAllTests; }
+cc::vector<cc::unique_ptr<Test>>& nx::detail::get_all_tests()
+{
+    static cc::vector<cc::unique_ptr<Test>> all_tests;
+    return all_tests;
+}
 
 void nx::detail::configure(Test* t, before const& v) { t->addBeforePattern(v.pattern); }
 
@@ -21,6 +23,6 @@ Test* detail::register_test(const char* name, const char* file, int line, test_f
 {
     auto t = cc::make_unique<Test>(name, file, line, fun);
     auto t_ptr = t.get();
-    sAllTests.push_back(std::move(t));
+    get_all_tests().push_back(std::move(t));
     return t_ptr;
 }

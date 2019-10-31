@@ -50,6 +50,6 @@ private:
 
 namespace detail
 {
-cc::vector<cc::unique_ptr<Test>> const& get_all_tests();
+cc::vector<cc::unique_ptr<Test>>& get_all_tests();
 }
 }

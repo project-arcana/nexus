@@ -1,6 +1,7 @@
 #include "check.hh"
 
 // TODO: replace with proper log
+#include <exception>
 #include <iostream>
 
 void nx::detail::report_failed_check(nx::detail::check_result const& r, const char* check, const char* file, int line, char const* function, bool terminate)
@@ -17,4 +18,8 @@ void nx::detail::report_failed_check(nx::detail::check_result const& r, const ch
     }
 
     // TODO: delete r.lhs and r.rhs
+
+    // TODO: make custom exception
+    if (terminate)
+        throw std::logic_error("test assertion failed");
 }

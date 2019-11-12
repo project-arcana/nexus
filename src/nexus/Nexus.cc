@@ -12,6 +12,16 @@
 #include <iomanip>
 #include <iostream>
 
+namespace
+{
+nx::Test*& curr_test()
+{
+    thread_local static nx::Test* t = nullptr;
+    return t;
+}
+}
+nx::Test* nx::detail::get_current_test() { return curr_test(); }
+
 void nx::Nexus::applyCmdArgs(int argc, char** argv)
 {
     for (auto i = 1; i < argc; ++i)
@@ -61,11 +71,13 @@ int nx::Nexus::run()
     {
         std::cout << "[" << t->name().c_str() << "]" << std::endl;
 
+        curr_test() = t;
         auto const start_thread = std::this_thread::get_id();
         auto const start = std::chrono::high_resolution_clock::now();
         t->function()();
         auto const end = std::chrono::high_resolution_clock::now();
         auto const end_thread = std::this_thread::get_id();
+        curr_test() = nullptr;
 
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;

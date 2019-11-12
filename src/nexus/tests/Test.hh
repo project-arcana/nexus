@@ -50,5 +50,6 @@ private:
 namespace detail
 {
 cc::vector<cc::unique_ptr<Test>>& get_all_tests();
+Test* get_current_test(); // TODO: discuss if and how this should be open API
 }
 }

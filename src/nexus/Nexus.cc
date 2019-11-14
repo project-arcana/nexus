@@ -61,7 +61,7 @@ int nx::Nexus::run()
     std::cout << "[nexus] detected " << tests.size() << (tests.size() == 1 ? " test" : " tests") << std::endl;
     std::cout << "[nexus] running " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests") << std::endl;
     std::cout << "=======================================================" << std::endl;
-    std::cout << std::setprecision(4) << std::endl;
+    std::cout << std::setprecision(4);
     // TODO
 
     // execute tests
@@ -69,8 +69,6 @@ int nx::Nexus::run()
     auto total_time_ms = 0.0;
     for (auto t : tests_to_run)
     {
-        std::cout << "[" << t->name().c_str() << "]" << std::endl;
-
         curr_test() = t;
         auto const start_thread = std::this_thread::get_id();
         auto const start = std::chrono::high_resolution_clock::now();
@@ -82,12 +80,12 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-        std::cout << " ... " << test_time_ms << " ms";
+        std::cout << "  [" << t->name().c_str() << "] ... in " << test_time_ms << " ms";
 
         if (start_thread != end_thread)
             std::cerr << " (WARNING: changed OS thread, from " << start_thread << " to " << end_thread << ")";
 
-        std::cout << std::endl << std::endl;
+        std::cout << std::endl;
     }
 
     std::cout << "=======================================================" << std::endl;

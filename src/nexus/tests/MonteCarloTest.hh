@@ -15,7 +15,7 @@ class MonteCarloTest
 {
     // fwd
 private:
-    class Machine;
+    struct machine;
     struct value;
     struct constant;
     struct function;

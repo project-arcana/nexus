@@ -21,17 +21,17 @@
  * - the same name may be reused many times
  *
  * Examples:
- *  NX_TEST("my test")
+ *  TEST("my test")
  *  {
  *      CHECK(1 + 1 == 2);
  *  }
  *
  *  // is not run concurrently with any other test
- *  NX_TEST("my test", exclusive) { ... }
+ *  TEST("my test", exclusive) { ... }
  *
  *  // runs this test before/after some other tests (specified via pattern)
  *  // if the other tests fail for some reason, this test is not run at all
- *  NX_TEST("my test", before("other test"), after("some pattern*")) { ... }
+ *  TEST("my test", before("other test"), after("some pattern*")) { ... }
  */
 #define NX_TEST(...) NX_DETAIL_REGISTER_TEST(CC_MACRO_JOIN(_nx_anon_test_function_, __COUNTER__), __VA_ARGS__)
 

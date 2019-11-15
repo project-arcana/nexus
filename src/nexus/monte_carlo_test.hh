@@ -38,7 +38,7 @@
     NX_TEST(__VA_ARGS__)                                    \
     {                                                       \
         mct_class mct;                                      \
-        mct.emplaceValue<tg::rng>("built-in rng");          \
+        mct.addValue("built-in rng", tg::rng());            \
         mct.execute();                                      \
     }                                                       \
     mct_class::mct_class()

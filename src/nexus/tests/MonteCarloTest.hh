@@ -40,6 +40,8 @@ public:
     function& addInvariant(cc::string name, F&& f)
     {
         auto& fun = addOp(name, cc::forward<F>(f));
+        CC_CONTRACT(fun.return_type == typeid(void));
+        CC_CONTRACT(fun.arity() > 0);
         fun.is_invariant = true;
         return fun;
     }
@@ -47,12 +49,8 @@ public:
     template <class T>
     void addValue(cc::string name, T&& v)
     {
-        mConstants.push_back({cc::move(name), new T(cc::forward<T>(v))});
-    }
-    template <class T, class... Args>
-    void emplaceValue(cc::string name, Args&&... args)
-    {
-        mConstants.push_back({cc::move(name), new T(cc::forward<Args>(args)...)});
+        auto& f = addOp(cc::move(name), [v = cc::forward<T>(v)] { return v; });
+        f.execute_at_least(0); // optional
     }
 
     // TODO: testSubstitutability(...)
@@ -63,7 +61,6 @@ public:
 
     // impls
 private:
-
     struct value
     {
         using deleter_t = void (*)(void*);
@@ -110,7 +107,7 @@ private:
     struct constant
     {
         cc::string name;
-        value val;
+        cc::unique_function<value()> make_value;
     };
 
     template <class... Args>
@@ -134,13 +131,13 @@ private:
     {
         // TODO: logging/printing inputs -> outputs
 
-        cc::string name;
-        cc::unique_function<value(cc::span<value*>)> execute;
-        cc::vector<std::type_index> arg_types;
-        std::type_index return_type;
-        bool is_invariant = false;
-
         int arity() const { return arg_types.size(); }
+
+        function& execute_at_least(int cnt)
+        {
+            min_executions = cnt;
+            return *this;
+        }
 
         template <class F, class R, class... Args>
         function(cc::string name, F&& f, R (F::*op)(Args...)) : name(cc::move(name)), return_type(typeid(std::decay_t<R>))
@@ -171,11 +168,21 @@ private:
                 return executor<Args...>::template apply<std::decay_t<R>>(f, inputs, std::index_sequence_for<Args...>());
             };
         }
+
+    private:
+        cc::string name;
+        cc::unique_function<value(cc::span<value*>)> execute;
+        cc::vector<std::type_index> arg_types;
+        std::type_index return_type;
+        bool is_invariant = false;
+        int min_executions = 100;
+        int executions = 0;
+
+        friend class MonteCarloTest;
     };
 
     // members
 private:
     cc::vector<function> mFunctions;
-    cc::vector<constant> mConstants;
 };
 }

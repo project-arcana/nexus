@@ -22,9 +22,13 @@
 #define NX_IMPL_CHECK(terminate, ...)                                                                          \
     do                                                                                                         \
     {                                                                                                          \
+        ::nx::detail::number_of_assertions()++;                                                                \
         ::nx::detail::check_result r = ::nx::detail::start_check{} < __VA_ARGS__;                              \
         if (!r.is_true)                                                                                        \
+        {                                                                                                      \
+            ::nx::detail::number_of_failed_assertions()++;                                                     \
             ::nx::detail::report_failed_check(r, #__VA_ARGS__, __FILE__, __LINE__, CC_PRETTY_FUNC, terminate); \
+        }                                                                                                      \
     } while (0)
 
 #define NX_IMPL_FORBID_COMPLEX_CHAIN                                                                                                   \
@@ -44,6 +48,17 @@
 
 namespace nx::detail
 {
+inline int& number_of_assertions()
+{
+    thread_local static int cnt = 0;
+    return cnt;
+}
+inline int& number_of_failed_assertions()
+{
+    thread_local static int cnt = 0;
+    return cnt;
+}
+
 struct check_result
 {
     bool is_true = false;

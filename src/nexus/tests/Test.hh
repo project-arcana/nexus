@@ -19,6 +19,9 @@ public:
     int line() const { return mLine; }
     test_fun_t function() const { return mFunction; }
     bool isExclusive() const { return mIsExclusive; }
+    bool hasFailed() const { return mFailedAssertions > 0; }
+    int assertions() const { return mAssertions; }
+    int failedAssertions() const { return mFailedAssertions; }
 
     // methods
 public:
@@ -42,9 +45,14 @@ private:
     int mLine;
     test_fun_t mFunction;
 
+    int mAssertions = 0;
+    int mFailedAssertions = 0;
+
     bool mIsExclusive = false;
     cc::vector<cc::string> mAfterPatterns;
     cc::vector<cc::string> mBeforePatterns;
+
+    friend class Nexus;
 };
 
 namespace detail

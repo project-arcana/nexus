@@ -2,6 +2,8 @@
 
 #include <typed-geometry/feature/random.hh>
 
+#include <nexus/test.hh>
+
 #include <iostream> // DEBUG!
 
 #include <map>
@@ -46,7 +48,7 @@ void nx::MonteCarloTest::execute()
                 m.values[a].invariants.push_back(&f);
 
         // register generators
-        if (f.return_type != typeid(void))
+        if (!f.is_invariant && f.return_type != typeid(void))
         {
             auto& vs = m.values[f.return_type];
 
@@ -89,14 +91,23 @@ void nx::MonteCarloTest::execute()
             CC_ASSERT(f->arity() == 1 && "currently only unary invariants supported");
             CC_ASSERT(f->arg_types[0] == v.type);
             value* vp = &v;
-            f->execute(cc::span<value*>(vp));
+            auto iv = f->execute(cc::span<value*>(vp));
+            if (iv.type == typeid(bool))
+                CHECK(*static_cast<bool*>(iv.ptr));
         }
     };
 
     // execute
     cc::vector<value*> args;
+    auto unsuccessful_count = 0;
     while (!m.test_functions.empty())
     {
+        if (unsuccessful_count > 1000)
+        {
+            std::cerr << "ERROR: unable to execute a test function (no precondition satisfied)" << std::endl;
+            break;
+        }
+
         // randomly choose new unsatisfied function
         auto f = random_choice(rng, m.test_functions);
 
@@ -129,8 +140,23 @@ void nx::MonteCarloTest::execute()
         args.clear();
         for (auto a : f->arg_types)
             args.push_back(&random_choice(rng, m.values.at(a).vars));
+
+        // check precondition
+        if (f->precondition && !f->precondition(args))
+        {
+            ++unsuccessful_count;
+            continue;
+        }
+
+        // execute function
         auto v = f->execute(args);
         f->executions++;
+        unsuccessful_count = 0;
+
+        // invariants for reference args
+        for (size_t i = 0; i < args.size(); ++i)
+            if (f->arg_types_could_change[i])
+                execute_invariants_for(*args[i]);
 
         if (!v.is_void())
         {

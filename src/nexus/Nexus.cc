@@ -1,5 +1,6 @@
 #include "Nexus.hh"
 
+#include <nexus/check.hh>
 #include <nexus/tests/Test.hh>
 
 #include <clean-core/string_view.hh>
@@ -11,6 +12,7 @@
 // TODO: proper log
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 
 namespace
 {
@@ -60,15 +62,20 @@ int nx::Nexus::run()
     std::cout << "[nexus] run with '--help' for options" << std::endl;
     std::cout << "[nexus] detected " << tests.size() << (tests.size() == 1 ? " test" : " tests") << std::endl;
     std::cout << "[nexus] running " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests") << std::endl;
-    std::cout << "=======================================================" << std::endl;
+    std::cout << "==============================================================================" << std::endl;
     std::cout << std::setprecision(4);
     // TODO
 
     // execute tests
     // TODO: timings and statistics and so on
     auto total_time_ms = 0.0;
+    auto fails = 0;
+    auto assertions = 0;
+    auto failed_assertions = 0;
     for (auto t : tests_to_run)
     {
+        detail::number_of_assertions() = 0;
+        detail::number_of_failed_assertions() = 0;
         curr_test() = t;
         auto const start_thread = std::this_thread::get_id();
         auto const start = std::chrono::high_resolution_clock::now();
@@ -76,21 +83,46 @@ int nx::Nexus::run()
         auto const end = std::chrono::high_resolution_clock::now();
         auto const end_thread = std::this_thread::get_id();
         curr_test() = nullptr;
+        t->mAssertions = detail::number_of_assertions();
+        t->mFailedAssertions = detail::number_of_failed_assertions();
+        if (t->hasFailed())
+            fails++;
+        assertions += t->mAssertions;
+        failed_assertions += t->mFailedAssertions;
 
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-        std::cout << "  [" << t->name().c_str() << "] ... in " << test_time_ms << " ms";
+        std::stringstream ss_name, ss_asserts, ss_time;
+        ss_name << "  [" << t->name().c_str() << "]";
+        ss_asserts << " ... " << t->mAssertions << " assertions";
+        ss_time << " in " << test_time_ms << " ms";
+        auto s_name = ss_name.str();
+        auto s_asserts = ss_asserts.str();
+        auto s_time = ss_time.str();
+
+        // TODO: faster
+        while (s_name.size() < 40)
+            s_name.push_back(' ');
+        while (s_asserts.size() < 23)
+            s_asserts = ' ' + s_asserts;
+
+        std::cout << s_name << s_asserts << s_time << std::endl;
 
         if (start_thread != end_thread)
-            std::cerr << " (WARNING: changed OS thread, from " << start_thread << " to " << end_thread << ")";
-
-        std::cout << std::endl;
+            std::cerr << " (WARNING: changed OS thread, from " << start_thread << " to " << end_thread << ")" << std::endl;
     }
 
-    std::cout << "=======================================================" << std::endl;
-    std::cout << "[nexus] passed " << tests.size() << (tests.size() == 1 ? " test" : " tests") << " in " << total_time_ms << " ms" << std::endl;
-    std::cout << "[nexus] TODO!" << std::endl;
+    std::cout.flush();
+    std::cerr.flush();
+    std::cout << "==============================================================================" << std::endl;
+    std::cout << "[nexus] passed " << tests.size() - fails << " of " << tests.size() << (tests.size() == 1 ? " test" : " tests") << " in "
+              << total_time_ms << " ms" << std::endl;
+    std::cout << "[nexus] checked " << assertions << " assertions (" << failed_assertions << " failed)" << std::endl;
+    if (fails > 0)
+        std::cerr << "[nexus] ERROR: " << fails << " TEST" << (fails == 1 ? "" : "s") << " FAILED" << std::endl;
+    else
+        std::cout << "[nexus] success." << std::endl;
 
     return 0;
 }

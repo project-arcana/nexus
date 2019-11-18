@@ -97,6 +97,11 @@ void nx::MonteCarloTest::execute()
         }
     };
 
+    // pre callbacks
+    for (auto& f : mPreCallbacks)
+        if (f)
+            f();
+
     // execute
     cc::vector<value*> args;
     auto unsuccessful_count = 0;
@@ -181,4 +186,9 @@ void nx::MonteCarloTest::execute()
             }
         }
     }
+
+    // post callbacks
+    for (auto& f : mPostCallbacks)
+        if (f)
+            f();
 }

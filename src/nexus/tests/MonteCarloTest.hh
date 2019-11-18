@@ -70,6 +70,9 @@ public:
 
     // TODO: testSubstitutability(...)
 
+    void addPreSessionCallback(cc::unique_function<void()> f) { mPreCallbacks.emplace_back(cc::move(f)); }
+    void addPostSessionCallback(cc::unique_function<void()> f) { mPostCallbacks.emplace_back(cc::move(f)); }
+
     // execution
 public:
     void execute();
@@ -152,7 +155,7 @@ private:
     {
         // TODO: logging/printing inputs -> outputs
 
-        int arity() const { return arg_types.size(); }
+        int arity() const { return int(arg_types.size()); }
 
         function& execute_at_least(int cnt)
         {
@@ -262,5 +265,7 @@ private:
     // members
 private:
     cc::vector<function> mFunctions;
+    cc::vector<cc::unique_function<void()>> mPreCallbacks;
+    cc::vector<cc::unique_function<void()>> mPostCallbacks;
 };
 }

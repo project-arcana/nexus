@@ -10,6 +10,8 @@
 #include <clean-core/unique_function.hh>
 #include <clean-core/vector.hh>
 
+#include <nexus/check.hh>
+
 namespace nx
 {
 class MonteCarloTest
@@ -68,10 +70,35 @@ public:
         f.execute_at_least(0); // optional
     }
 
-    // TODO: testSubstitutability(...)
+    void addPreSessionCallback(cc::unique_function<void()> f);
+    void addPostSessionCallback(cc::unique_function<void()> f);
 
-    void addPreSessionCallback(cc::unique_function<void()> f) { mPreCallbacks.emplace_back(cc::move(f)); }
-    void addPostSessionCallback(cc::unique_function<void()> f) { mPostCallbacks.emplace_back(cc::move(f)); }
+    template <class A, class B, class F>
+    void testEquivalence(F&& test)
+    {
+        static_assert(std::is_invocable_v<F, A const&, B const&>, "function must be callable with (A const&, B const&)");
+        using R = std::invoke_result_t<F, A const&, B const&>;
+        auto& eq = mEquivalences.emplace_back(typeid(A), typeid(B));
+        if constexpr (std::is_same_v<R, void>)
+            eq.test = [test = cc::move(test)](value const& va, value const& vb) {
+                auto const& a = *static_cast<A const*>(va.ptr);
+                auto const& b = *static_cast<B const*>(vb.ptr);
+                test(a, b);
+            };
+        else if constexpr (std::is_same_v<R, bool>)
+            eq.test = [test = cc::move(test)](value const& va, value const& vb) {
+                auto const& a = *static_cast<A const*>(va.ptr);
+                auto const& b = *static_cast<B const*>(vb.ptr);
+                CHECK(test(a, b));
+            };
+        else
+            static_assert(cc::always_false<A, B>, "equivalence test must either return void or bool");
+    }
+    template <class A, class B>
+    void testEquivalence()
+    {
+        testEquivalence<A, B>([](A const& a, B const& b) { CHECK(a == b); });
+    }
 
     // execution
 public:
@@ -262,10 +289,20 @@ private:
         friend class MonteCarloTest;
     };
 
+    struct equivalence
+    {
+        std::type_index type_a;
+        std::type_index type_b;
+        cc::unique_function<void(value const&, value const&)> test;
+
+        equivalence(std::type_index a, std::type_index b) : type_a(a), type_b(b) {}
+    };
+
     // members
 private:
     cc::vector<function> mFunctions;
     cc::vector<cc::unique_function<void()>> mPreCallbacks;
     cc::vector<cc::unique_function<void()>> mPostCallbacks;
+    cc::vector<equivalence> mEquivalences;
 };
 }

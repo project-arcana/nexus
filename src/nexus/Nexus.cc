@@ -125,7 +125,9 @@ int nx::Nexus::run()
     if (failed_assertions > 0)
         std::cout << " (" << failed_assertions << " failed)";
     std::cout << std::endl;
-    if (fails > 0)
+    if (tests.empty())
+        std::cerr << "[nexus] ERROR: no tests found/selected" << std::endl;
+    else if (fails > 0)
         std::cerr << "[nexus] ERROR: " << fails << " TEST" << (fails == 1 ? "" : "s") << " FAILED" << std::endl;
     else
         std::cout << "[nexus] success." << std::endl;

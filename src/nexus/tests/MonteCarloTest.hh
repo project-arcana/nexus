@@ -13,6 +13,7 @@
 #include <clean-core/vector.hh>
 
 #include <nexus/check.hh>
+#include <nexus/detail/signature.hh>
 
 namespace nx
 {
@@ -27,42 +28,11 @@ private:
 
     // setup
 public:
-    template <class R, class... Args>
-    function& addOp(cc::string name, R (*f)(Args...))
-    {
-        mFunctions.emplace_back(cc::move(name), f);
-        return mFunctions.back();
-    }
     template <class F>
     function& addOp(cc::string name, F&& f)
     {
-        mFunctions.emplace_back(cc::move(name), cc::forward<F>(f), &F::operator());
+        mFunctions.emplace_back(cc::move(name), detail::make_function(cc::forward<F>(f)), detail::make_signature(cc::forward<F>(f)));
         return mFunctions.back();
-    }
-    template <class Obj, class R, class... Args>
-    function& addOp(cc::string name, R (Obj::*f)(Args...))
-    {
-        return addOp(name, [f](Obj& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
-    }
-    template <class Obj, class R, class... Args>
-    function& addOp(cc::string name, R (Obj::*f)(Args...) const)
-    {
-        return addOp(name, [f](Obj const& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
-    }
-    template <class Obj, class R, class... Args>
-    function& addOp(cc::string name, R (Obj::*f)(Args...) noexcept)
-    {
-        return addOp(name, [f](Obj& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
-    }
-    template <class Obj, class R, class... Args>
-    function& addOp(cc::string name, R (Obj::*f)(Args...) const noexcept)
-    {
-        return addOp(name, [f](Obj const& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
-    }
-    template <class Obj, class R>
-    function& addOp(cc::string name, R Obj::*f)
-    {
-        return addOp(name, [f](Obj& obj) -> R { return obj.*f; });
     }
 
     template <class F>
@@ -85,15 +55,10 @@ public:
     void addPreSessionCallback(cc::unique_function<void()> f);
     void addPostSessionCallback(cc::unique_function<void()> f);
 
-    template <class A, class B, class R>
-    void testEquivalence(R (*f)(A, B))
-    {
-        implTestEquivalence<A, B, R>(f);
-    }
     template <class F>
     void testEquivalence(F&& test)
     {
-        implTestEquivalenceInfer(cc::forward<F>(test), &F::operator());
+        implTestEquivalence(detail::make_function(cc::forward<F>(test)), detail::make_signature(cc::forward<F>(test)));
     }
     template <class A, class B>
     void testEquivalence()
@@ -113,41 +78,21 @@ public:
 
     // impls
 private:
-    template <class A, class B, class R, class F>
-    void implTestEquivalenceInfer(F&& test, R (F::*)(A, B))
-    {
-        implTestEquivalence<std::decay_t<A>, std::decay_t<B>, R>(cc::forward<F>(test));
-    }
-    template <class A, class B, class R, class F>
-    void implTestEquivalenceInfer(F&& test, R (F::*)(A, B) const)
-    {
-        implTestEquivalence<std::decay_t<A>, std::decay_t<B>, R>(cc::forward<F>(test));
-    }
-    template <class A, class B, class R, class F>
-    void implTestEquivalenceInfer(F&& test, R (F::*)(A, B) noexcept)
-    {
-        implTestEquivalence<std::decay_t<A>, std::decay_t<B>, R>(cc::forward<F>(test));
-    }
-    template <class A, class B, class R, class F>
-    void implTestEquivalenceInfer(F&& test, R (F::*)(A, B) const noexcept)
-    {
-        implTestEquivalence<std::decay_t<A>, std::decay_t<B>, R>(cc::forward<F>(test));
-    }
-    template <class A, class B, class R, class F>
-    void implTestEquivalence(F&& test)
+    template <class F, class R, class A, class B>
+    void implTestEquivalence(F&& test, detail::signature<R(A, B)>)
     {
         static_assert(std::is_invocable_v<F, A const&, B const&>, "function must be callable with (A const&, B const&)");
         auto& eq = mEquivalences.emplace_back(typeid(A), typeid(B));
         if constexpr (std::is_same_v<R, void>)
             eq.test = [test = cc::move(test)](value const& va, value const& vb) {
-                auto const& a = *static_cast<A const*>(va.ptr);
-                auto const& b = *static_cast<B const*>(vb.ptr);
+                auto const& a = *static_cast<std::decay_t<A> const*>(va.ptr);
+                auto const& b = *static_cast<std::decay_t<B> const*>(vb.ptr);
                 test(a, b);
             };
         else if constexpr (std::is_same_v<R, bool>)
             eq.test = [test = cc::move(test)](value const& va, value const& vb) {
-                auto const& a = *static_cast<A const*>(va.ptr);
-                auto const& b = *static_cast<B const*>(vb.ptr);
+                auto const& a = *static_cast<std::decay_t<A> const*>(va.ptr);
+                auto const& b = *static_cast<std::decay_t<B> const*>(vb.ptr);
                 CHECK(test(a, b));
             };
         else
@@ -227,70 +172,7 @@ private:
         }
 
         template <class F, class R, class... Args>
-        function(cc::string name, F&& f, R (F::*)(Args...)) : name(cc::move(name)), return_type(typeid(std::decay_t<R>))
-        {
-            init<decltype(f), R, Args...>(cc::forward<F>(f));
-        }
-
-        template <class F, class R, class... Args>
-        function(cc::string name, F&& f, R (F::*)(Args...) const) : name(cc::move(name)), return_type(typeid(std::decay_t<R>))
-        {
-            init<decltype(f), R, Args...>(cc::forward<F>(f));
-        }
-
-        template <class R, class... Args>
-        function(cc::string name, R (*f)(Args...)) : name(cc::move(name)), return_type(typeid(std::decay_t<R>))
-        {
-            init<decltype(f), R, Args...>(f);
-        }
-
-        template <class F>
-        function& when(F&& f)
-        {
-            impl_set_precondition(cc::forward<F>(f), &F::operator());
-            return *this;
-        }
-        template <class R, class... Args>
-        function& when(R (*f)(Args...))
-        {
-            set_precondition<decltype(f), R, Args...>(f);
-            return *this;
-        }
-        template <class Obj, class R, class... Args>
-        function& when(R (Obj::*f)(Args...))
-        {
-            return when([f](Obj& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
-        }
-        template <class Obj, class R, class... Args>
-        function& when(R (Obj::*f)(Args...) const)
-        {
-            return when([f](Obj const& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
-        }
-        template <class Obj, class R, class... Args>
-        function& when(R (Obj::*f)(Args...) noexcept)
-        {
-            return when([f](Obj& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
-        }
-        template <class Obj, class R, class... Args>
-        function& when(R (Obj::*f)(Args...) const noexcept)
-        {
-            return when([f](Obj const& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
-        }
-        template <class Obj, class R>
-        function& when(R Obj::*f)
-        {
-            return when([f](Obj& obj) -> R { return obj.*f; });
-        }
-
-        template <class Obj, class R, class... Args>
-        function& when_not(R (Obj::*f)(Args...) const)
-        {
-            return when([f](Obj const& obj, Args... args) -> R { return !(obj.*f)(cc::forward<Args>(args)...); });
-        }
-
-    private:
-        template <class F, class R, class... Args>
-        void init(F f)
+        function(cc::string name, F&& f, detail::signature<R(Args...)>) : name(cc::move(name)), return_type(typeid(std::decay_t<R>))
         {
             (arg_types.emplace_back(typeid(std::decay_t<Args>)), ...);
             (arg_types_could_change.push_back(std::is_reference_v<Args> && !std::is_const_v<std::remove_reference_t<Args>>), ...);
@@ -306,28 +188,64 @@ private:
             };
         }
 
-        template <class F, class R, class... Args>
-        void impl_set_precondition(F&& f, R (F::*)(Args...))
+        template <class F>
+        function& when(F&& f)
         {
-            set_precondition<F, R, Args...>(cc::forward<F>(f));
+            set_precondition(detail::make_function(cc::forward<F>(f)), detail::make_signature(cc::forward<F>(f)));
+            return *this;
         }
-        template <class F, class R, class... Args>
-        void impl_set_precondition(F&& f, R (F::*)(Args...) const)
+
+        template <class F>
+        function& when_not(F&& f)
         {
-            set_precondition<F, R, Args...>(cc::forward<F>(f));
+            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [](auto&& v) { return !v; }, detail::make_signature(cc::forward<F>(f))));
         }
-        template <class F, class R, class... Args>
-        void impl_set_precondition(F&& f, R (F::*)(Args...) noexcept)
+
+        template <class F, class V>
+        function& when_equal(F&& f, V&& value)
         {
-            set_precondition<F, R, Args...>(cc::forward<F>(f));
+            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v == value; },
+                                        detail::make_signature(cc::forward<F>(f))));
         }
-        template <class F, class R, class... Args>
-        void impl_set_precondition(F&& f, R (F::*)(Args...) const noexcept)
+
+        template <class F, class V>
+        function& when_not_equal(F&& f, V&& value)
         {
-            set_precondition<F, R, Args...>(cc::forward<F>(f));
+            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v != value; },
+                                        detail::make_signature(cc::forward<F>(f))));
         }
+
+        template <class F, class V>
+        function& when_greater_than(F&& f, V&& value)
+        {
+            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v > value; },
+                                        detail::make_signature(cc::forward<F>(f))));
+        }
+
+        template <class F, class V>
+        function& when_greater_or_equal(F&& f, V&& value)
+        {
+            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v >= value; },
+                                        detail::make_signature(cc::forward<F>(f))));
+        }
+
+        template <class F, class V>
+        function& when_less_than(F&& f, V&& value)
+        {
+            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v < value; },
+                                        detail::make_signature(cc::forward<F>(f))));
+        }
+
+        template <class F, class V>
+        function& when_less_or_equal(F&& f, V&& value)
+        {
+            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v <= value; },
+                                        detail::make_signature(cc::forward<F>(f))));
+        }
+
+    private:
         template <class F, class R, class... Args>
-        void set_precondition(F&& f)
+        void set_precondition(F&& f, detail::signature<R(Args...)>)
         {
             CC_ASSERT(!precondition && "already has a precondition");
             static_assert(std::is_same_v<R, bool>, "precondition must return bool");

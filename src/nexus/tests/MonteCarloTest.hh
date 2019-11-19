@@ -4,6 +4,8 @@
 #include <typeinfo>
 #include <utility>
 
+#include <map> // TODO: replace with cc!
+
 #include <clean-core/capped_vector.hh>
 #include <clean-core/span.hh>
 #include <clean-core/string.hh>
@@ -98,6 +100,12 @@ public:
     void testEquivalence()
     {
         testEquivalence<A, B>([](A const& a, B const& b) { CHECK(a == b); });
+    }
+
+    template <class T, class F>
+    void setPrinter(F&& f)
+    {
+        mTypeMetadata[std::type_index(typeid(T))].to_string = [f = cc::move(f)](void* p) { return f(*static_cast<T const*>(p)); };
     }
 
     // execution
@@ -298,8 +306,14 @@ private:
         equivalence(std::type_index a, std::type_index b) : type_a(a), type_b(b) {}
     };
 
+    struct type_metadata
+    {
+        cc::unique_function<cc::string(void*)> to_string;
+    };
+
     // members
 private:
+    std::map<std::type_index, type_metadata> mTypeMetadata;
     cc::vector<function> mFunctions;
     cc::vector<cc::unique_function<void()>> mPreCallbacks;
     cc::vector<cc::unique_function<void()>> mPostCallbacks;

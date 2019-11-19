@@ -117,8 +117,14 @@ int nx::Nexus::run()
     std::cerr.flush();
     std::cout << "==============================================================================" << std::endl;
     std::cout << "[nexus] passed " << tests.size() - fails << " of " << tests.size() << (tests.size() == 1 ? " test" : " tests") << " in "
-              << total_time_ms << " ms" << std::endl;
-    std::cout << "[nexus] checked " << assertions << " assertions (" << failed_assertions << " failed)" << std::endl;
+              << total_time_ms << " ms";
+    if (fails > 0)
+        std::cout << " (" << fails << " failed)";
+    std::cout << std::endl;
+    std::cout << "[nexus] checked " << assertions << " assertions";
+    if (failed_assertions > 0)
+        std::cout << " (" << failed_assertions << " failed)";
+    std::cout << std::endl;
     if (fails > 0)
         std::cerr << "[nexus] ERROR: " << fails << " TEST" << (fails == 1 ? "" : "s") << " FAILED" << std::endl;
     else

@@ -85,11 +85,58 @@ public:
     void addPreSessionCallback(cc::unique_function<void()> f);
     void addPostSessionCallback(cc::unique_function<void()> f);
 
-    template <class A, class B, class F>
+    template <class A, class B, class R>
+    void testEquivalence(R (*f)(A, B))
+    {
+        implTestEquivalence<A, B, R>(f);
+    }
+    template <class F>
     void testEquivalence(F&& test)
     {
+        implTestEquivalenceInfer(cc::forward<F>(test), &F::operator());
+    }
+    template <class A, class B>
+    void testEquivalence()
+    {
+        testEquivalence([](A const& a, B const& b) { CHECK(a == b); });
+    }
+
+    template <class T, class F>
+    void setPrinter(F&& f)
+    {
+        mTypeMetadata[std::type_index(typeid(T))].to_string = [f = cc::move(f)](void* p) { return f(*static_cast<T const*>(p)); };
+    }
+
+    // execution
+public:
+    void execute();
+
+    // impls
+private:
+    template <class A, class B, class R, class F>
+    void implTestEquivalenceInfer(F&& test, R (F::*)(A, B))
+    {
+        implTestEquivalence<std::decay_t<A>, std::decay_t<B>, R>(cc::forward<F>(test));
+    }
+    template <class A, class B, class R, class F>
+    void implTestEquivalenceInfer(F&& test, R (F::*)(A, B) const)
+    {
+        implTestEquivalence<std::decay_t<A>, std::decay_t<B>, R>(cc::forward<F>(test));
+    }
+    template <class A, class B, class R, class F>
+    void implTestEquivalenceInfer(F&& test, R (F::*)(A, B) noexcept)
+    {
+        implTestEquivalence<std::decay_t<A>, std::decay_t<B>, R>(cc::forward<F>(test));
+    }
+    template <class A, class B, class R, class F>
+    void implTestEquivalenceInfer(F&& test, R (F::*)(A, B) const noexcept)
+    {
+        implTestEquivalence<std::decay_t<A>, std::decay_t<B>, R>(cc::forward<F>(test));
+    }
+    template <class A, class B, class R, class F>
+    void implTestEquivalence(F&& test)
+    {
         static_assert(std::is_invocable_v<F, A const&, B const&>, "function must be callable with (A const&, B const&)");
-        using R = std::invoke_result_t<F, A const&, B const&>;
         auto& eq = mEquivalences.emplace_back(typeid(A), typeid(B));
         if constexpr (std::is_same_v<R, void>)
             eq.test = [test = cc::move(test)](value const& va, value const& vb) {
@@ -106,24 +153,7 @@ public:
         else
             static_assert(cc::always_false<A, B>, "equivalence test must either return void or bool");
     }
-    template <class A, class B>
-    void testEquivalence()
-    {
-        testEquivalence<A, B>([](A const& a, B const& b) { CHECK(a == b); });
-    }
 
-    template <class T, class F>
-    void setPrinter(F&& f)
-    {
-        mTypeMetadata[std::type_index(typeid(T))].to_string = [f = cc::move(f)](void* p) { return f(*static_cast<T const*>(p)); };
-    }
-
-    // execution
-public:
-    void execute();
-
-    // impls
-private:
     struct value
     {
         using deleter_t = void (*)(void*);
@@ -177,21 +207,9 @@ private:
     struct executor
     {
         template <class R, class F, size_t... I>
-        static value apply(F&& f, cc::span<value*> inputs, std::index_sequence<I...>)
+        static R apply(F&& f, cc::span<value*> inputs, std::index_sequence<I...>)
         {
             // TODO: proper rvalue ref support (maybe via forward?)
-            if constexpr (std::is_same_v<R, void>)
-            {
-                f((*static_cast<std::decay_t<Args>*>(inputs[I]->ptr))...);
-                return {};
-            }
-            else
-                return new R(f((*static_cast<std::decay_t<Args>*>(inputs[I]->ptr))...));
-        }
-
-        template <class F, size_t... I>
-        static bool predicate(F&& f, cc::span<value*> inputs, std::index_sequence<I...>)
-        {
             return f((*static_cast<std::decay_t<Args>*>(inputs[I]->ptr))...);
         }
     };
@@ -264,6 +282,12 @@ private:
             return when([f](Obj& obj) -> R { return obj.*f; });
         }
 
+        template <class Obj, class R, class... Args>
+        function& when_not(R (Obj::*f)(Args...) const)
+        {
+            return when([f](Obj const& obj, Args... args) -> R { return !(obj.*f)(cc::forward<Args>(args)...); });
+        }
+
     private:
         template <class F, class R, class... Args>
         void init(F f)
@@ -272,7 +296,13 @@ private:
             (arg_types_could_change.push_back(std::is_reference_v<Args> && !std::is_const_v<std::remove_reference_t<Args>>), ...);
 
             execute = [f = cc::forward<F>(f)](cc::span<value*> inputs) -> value {
-                return executor<Args...>::template apply<std::decay_t<R>>(f, inputs, std::index_sequence_for<Args...>());
+                if constexpr (std::is_same_v<R, void>)
+                {
+                    executor<Args...>::template apply<std::decay_t<R>>(f, inputs, std::index_sequence_for<Args...>());
+                    return {};
+                }
+                else
+                    return new std::decay_t<R>(executor<Args...>::template apply<std::decay_t<R>>(f, inputs, std::index_sequence_for<Args...>()));
             };
         }
 
@@ -283,6 +313,16 @@ private:
         }
         template <class F, class R, class... Args>
         void impl_set_precondition(F&& f, R (F::*)(Args...) const)
+        {
+            set_precondition<F, R, Args...>(cc::forward<F>(f));
+        }
+        template <class F, class R, class... Args>
+        void impl_set_precondition(F&& f, R (F::*)(Args...) noexcept)
+        {
+            set_precondition<F, R, Args...>(cc::forward<F>(f));
+        }
+        template <class F, class R, class... Args>
+        void impl_set_precondition(F&& f, R (F::*)(Args...) const noexcept)
         {
             set_precondition<F, R, Args...>(cc::forward<F>(f));
         }
@@ -299,7 +339,7 @@ private:
                 CC_ASSERT(p_types[i] == arg_types[i] && "precondition arguments types must match op arguments");
 
             precondition = [f = cc::forward<F>(f)](cc::span<value*> inputs) -> bool {
-                return executor<Args...>::predicate(f, inputs, std::index_sequence_for<Args...>());
+                return executor<Args...>::template apply<bool>(f, inputs, std::index_sequence_for<Args...>());
             };
         }
 

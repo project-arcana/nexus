@@ -406,7 +406,7 @@ void nx::MonteCarloTest::execute()
 
             // unrelated funs
             for (auto& f : mFunctions)
-                if (!eq_funs.count(&f))
+                if (!eq_funs.count(&f) || f.is_invariant) // always add invariants
                     funs.emplace_back(&f, &f);
 
             // type related funs
@@ -456,19 +456,22 @@ void nx::MonteCarloTest::execute()
                 funs_a.push_back(f_a);
                 funs_b.push_back(f_b);
 
-                if (f_a->return_type == e.type_a)
-                    CC_ASSERT(f_b->return_type == e.type_b);
-                else
-                    CC_ASSERT(f_a->return_type == f_b->return_type);
-
-                for (auto i = 0; i < f_a->arity(); ++i)
+                if (!f_a->is_invariant)
                 {
-                    CC_ASSERT(f_a->arg_types_could_change[i] == f_b->arg_types_could_change[i]);
-
-                    if (f_a->arg_types[i] == e.type_a)
-                        CC_ASSERT(f_b->arg_types[i] == e.type_b);
+                    if (f_a->return_type == e.type_a)
+                        CC_ASSERT(f_b->return_type == e.type_b);
                     else
-                        CC_ASSERT(f_a->arg_types[i] == f_b->arg_types[i]);
+                        CC_ASSERT(f_a->return_type == f_b->return_type);
+
+                    for (auto i = 0; i < f_a->arity(); ++i)
+                    {
+                        CC_ASSERT(f_a->arg_types_could_change[i] == f_b->arg_types_could_change[i]);
+
+                        if (f_a->arg_types[i] == e.type_a)
+                            CC_ASSERT(f_b->arg_types[i] == e.type_b);
+                        else
+                            CC_ASSERT(f_a->arg_types[i] == f_b->arg_types[i]);
+                    }
                 }
             }
 
@@ -500,7 +503,7 @@ void nx::MonteCarloTest::execute()
                 if (f_b->precondition)
                     CC_ASSERT(f_b->precondition(args_b) && "first precondition was true but second was not");
             };
-            auto const bi_execution = [&m_a, &m_b, &e](tg::rng& rng, function* f_a, function* f_b, cc::span<value*> args_a, cc::span<value*> args_b) {
+            auto const bi_execution = [this, &m_a, &m_b, &e](tg::rng& rng, function* f_a, function* f_b, cc::span<value*> args_a, cc::span<value*> args_b) {
                 CC_ASSERT(f_a->internal_idx == f_b->internal_idx);
                 CC_ASSERT(f_a->arity() == f_b->arity());
                 CC_ASSERT(f_a->arity() == int(args_a.size()));
@@ -515,11 +518,32 @@ void nx::MonteCarloTest::execute()
                     CC_ASSERT(vb.type == e.type_b && "type mismatch");
                     e.test(va, vb);
                 }
-                for (auto i = 0; i < f_a->arity(); ++i)
-                    if (f_a->arg_types_could_change[i] && f_a->arg_types[i] == e.type_a)
+                else
+                {
+                    CC_ASSERT(va.type == vb.type && "type mismatch");
+                    if (!va.is_void())
                     {
-                        CC_ASSERT(f_b->arg_types[i] == e.type_b && "type mismatch");
-                        e.test(*args_a[i], *args_b[i]);
+                        CC_ASSERT(mTypeMetadata.count(va.type));
+                        if (auto const& test_eq = mTypeMetadata.at(va.type).check_equality)
+                            test_eq(va, vb);
+                    }
+                }
+
+                for (auto i = 0; i < f_a->arity(); ++i)
+                    if (f_a->arg_types_could_change[i])
+                    {
+                        if (f_a->arg_types[i] == e.type_a)
+                        {
+                            CC_ASSERT(f_b->arg_types[i] == e.type_b && "type mismatch");
+                            e.test(*args_a[i], *args_b[i]);
+                        }
+                        else
+                        {
+                            CC_ASSERT(f_a->arg_types[i] == f_b->arg_types[i] && "type mismatch");
+                            CC_ASSERT(mTypeMetadata.count(f_a->arg_types[i]));
+                            if (auto const& test_eq = mTypeMetadata.at(f_a->arg_types[i]).check_equality)
+                                test_eq(*args_a[i], *args_b[i]);
+                        }
                     }
 
                 // reintegrate values

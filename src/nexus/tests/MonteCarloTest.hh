@@ -7,6 +7,7 @@
 #include <map> // TODO: replace with cc!
 
 #include <clean-core/capped_vector.hh>
+#include <clean-core/has_operator.hh>
 #include <clean-core/span.hh>
 #include <clean-core/string.hh>
 #include <clean-core/unique_function.hh>
@@ -32,7 +33,9 @@ public:
     template <class F>
     function& addOp(cc::string name, F&& f)
     {
-        mFunctions.emplace_back(cc::move(name), detail::make_function(cc::forward<F>(f)), detail::make_signature(cc::forward<F>(f)));
+        auto sig = detail::make_signature(cc::forward<F>(f));
+        mFunctions.emplace_back(cc::move(name), detail::make_function(cc::forward<F>(f)), sig);
+        registerFunctionType(sig);
         return mFunctions.back();
     }
 
@@ -64,7 +67,7 @@ public:
     template <class A, class B>
     void testEquivalence()
     {
-        testEquivalence([](A const& a, B const& b) { CHECK(a == b); });
+        testEquivalence([](A const& a, B const& b) { REQUIRE(a == b); });
     }
 
     template <class T, class F>
@@ -291,7 +294,30 @@ private:
     struct type_metadata
     {
         cc::unique_function<cc::string(void*)> to_string;
+        cc::unique_function<void(value const&, value const&)> check_equality;
     };
+
+    template <class R, class... Args>
+    void registerFunctionType(detail::signature<R(Args...)>)
+    {
+        if constexpr (!std::is_same_v<R, void>)
+            registerType<std::decay_t<R>>();
+
+        (registerType<std::decay_t<Args>>(), ...);
+    }
+
+    template <class T>
+    void registerType()
+    {
+        auto& md = mTypeMetadata[typeid(T)];
+
+        if constexpr (cc::has_operator_equal<T>)
+            md.check_equality = [](value const& va, value const& vb) {
+                auto const& a = *static_cast<T const*>(va.ptr);
+                auto const& b = *static_cast<T const*>(vb.ptr);
+                CHECK(a == b);
+            };
+    }
 
     // members
 private:

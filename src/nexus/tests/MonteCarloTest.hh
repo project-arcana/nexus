@@ -49,6 +49,16 @@ public:
     {
         return addOp(name, [f](Obj const& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
     }
+    template <class Obj, class R, class... Args>
+    function& addOp(cc::string name, R (Obj::*f)(Args...) noexcept)
+    {
+        return addOp(name, [f](Obj& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
+    }
+    template <class Obj, class R, class... Args>
+    function& addOp(cc::string name, R (Obj::*f)(Args...) const noexcept)
+    {
+        return addOp(name, [f](Obj const& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
+    }
     template <class Obj, class R>
     function& addOp(cc::string name, R Obj::*f)
     {
@@ -238,6 +248,16 @@ private:
         {
             return when([f](Obj const& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
         }
+        template <class Obj, class R, class... Args>
+        function& when(R (Obj::*f)(Args...) noexcept)
+        {
+            return when([f](Obj& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
+        }
+        template <class Obj, class R, class... Args>
+        function& when(R (Obj::*f)(Args...) const noexcept)
+        {
+            return when([f](Obj const& obj, Args... args) -> R { return (obj.*f)(cc::forward<Args>(args)...); });
+        }
         template <class Obj, class R>
         function& when(R Obj::*f)
         {
@@ -293,6 +313,7 @@ private:
         bool is_invariant = false;
         int min_executions = 100;
         int executions = 0;
+        int internal_idx = -1;
 
         friend class MonteCarloTest;
     };

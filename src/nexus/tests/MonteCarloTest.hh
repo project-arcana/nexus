@@ -17,6 +17,7 @@
 
 namespace nx
 {
+// TODO: allow when for a subset of arguments as long as it's unambiguous
 class MonteCarloTest
 {
     // fwd
@@ -75,6 +76,8 @@ public:
     // execution
 public:
     void execute();
+
+    void printSetup();
 
     // impls
 private:

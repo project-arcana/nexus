@@ -409,6 +409,11 @@ void nx::MonteCarloTest::execute()
             // type related funs
             for (auto const& [name, fa] : eq_funs_by_type.at(ta))
             {
+                if (!eq_funs_by_type.at(tb).count(name))
+                {
+                    std::cerr << "operation '" << name << "' not found for type " << tb.name() << std::endl;
+                    std::cerr << "(note: an exact match is required, subtyping may interfere with this)" << std::endl;
+                }
                 CC_ASSERT(eq_funs_by_type.at(tb).count(name) && "all functions checked for equivalence need to be defined for both types");
                 auto fb = eq_funs_by_type.at(tb).at(name);
                 funs.emplace_back(fa, fb);
@@ -580,5 +585,24 @@ void nx::MonteCarloTest::execute()
 
             // ~Machine() at scope end
         }
+    }
+}
+
+void nx::MonteCarloTest::printSetup()
+{
+    std::cout << "registered functions:" << std::endl;
+    for (auto const& f : mFunctions)
+    {
+        std::cout << "  " << f.name.c_str() << " : (";
+        for (auto i = 0; i < f.arity(); ++i)
+        {
+            if (i > 0)
+                std::cout << ", ";
+            std::cout << f.arg_types[i].name();
+        }
+        std::cout << ") -> " << f.return_type.name();
+        if (f.is_invariant)
+            std::cout << " [INVARIANT]";
+        std::cout << std::endl;
     }
 }

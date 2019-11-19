@@ -1,5 +1,7 @@
 #pragma once
 
+#include <type_traits>
+
 #include <clean-core/forward.hh>
 
 namespace nx::detail
@@ -73,7 +75,7 @@ signature<R(T const&, Args...)> make_signature(R (T::*)(Args...) const noexcept)
 template <class F>
 auto make_signature(F&&)
 {
-    return make_fun_signature(&F::operator());
+    return make_fun_signature(&std::decay_t<F>::operator());
 }
 
 

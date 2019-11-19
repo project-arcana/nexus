@@ -261,6 +261,9 @@ struct nx::MonteCarloTest::machine
         else
             f = random_choice(rng, all_functions);
 
+        if (!has_values_to_execute(*f))
+            return nullptr;
+
         // sample args and try to execute
         auto args = arg_buffer.subspan(0, f->arity());
         auto arg_indices = index_buffer.subspan(0, f->arity());

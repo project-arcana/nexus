@@ -10,6 +10,7 @@
 #include <nexus/test.hh>
 
 #include <iostream> // DEBUG!
+#include <string>
 
 #include <map>
 #include <set>

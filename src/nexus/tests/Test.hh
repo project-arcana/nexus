@@ -2,8 +2,7 @@
 
 #include <nexus/fwd.hh>
 
-#include <string>
-
+#include <clean-core/string.hh>
 #include <clean-core/vector.hh>
 
 namespace nx
@@ -15,17 +14,20 @@ class Test
 {
     // properties
 public:
-    std::string const& name() const { return mName; }
-    std::string const& file() const { return mFile; }
+    cc::string const& name() const { return mName; }
+    cc::string const& file() const { return mFile; }
     int line() const { return mLine; }
     test_fun_t function() const { return mFunction; }
     bool isExclusive() const { return mIsExclusive; }
+    bool hasFailed() const { return mFailedAssertions > 0; }
+    int assertions() const { return mAssertions; }
+    int failedAssertions() const { return mFailedAssertions; }
 
     // methods
 public:
     void setExclusive() { mIsExclusive = true; }
-    void addAfterPattern(std::string pattern) { mAfterPatterns.push_back(std::move(pattern)); }
-    void addBeforePattern(std::string pattern) { mBeforePatterns.push_back(std::move(pattern)); }
+    void addAfterPattern(cc::string pattern) { mAfterPatterns.push_back(cc::move(pattern)); }
+    void addBeforePattern(cc::string pattern) { mBeforePatterns.push_back(cc::move(pattern)); }
 
     // ctor
 public:
@@ -38,18 +40,24 @@ public:
 
     // members
 private:
-    std::string mName;
-    std::string mFile;
+    cc::string mName;
+    cc::string mFile;
     int mLine;
     test_fun_t mFunction;
 
+    int mAssertions = 0;
+    int mFailedAssertions = 0;
+
     bool mIsExclusive = false;
-    cc::vector<std::string> mAfterPatterns;
-    cc::vector<std::string> mBeforePatterns;
+    cc::vector<cc::string> mAfterPatterns;
+    cc::vector<cc::string> mBeforePatterns;
+
+    friend class Nexus;
 };
 
 namespace detail
 {
 cc::vector<cc::unique_ptr<Test>>& get_all_tests();
+Test* get_current_test(); // TODO: discuss if and how this should be open API
 }
 }

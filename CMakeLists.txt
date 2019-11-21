@@ -22,8 +22,6 @@ target_link_libraries(nexus PUBLIC
     clean-core
     ctracer
     typed-geometry
-    reflector
-    task-dispatcher
 )
 # TODO: make some dependencies optional?
 

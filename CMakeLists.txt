@@ -23,7 +23,16 @@ target_link_libraries(nexus PUBLIC
     ctracer
     typed-geometry
 )
-# TODO: make some dependencies optional?
+# TODO: make more dependencies optional?
+
+# =========================================
+# optional dependencies
+
+if (TARGET reflector)
+    target_compile_definitions(nexus PUBLIC NX_HAS_REFLECTOR)
+    target_link_libraries(nexus PUBLIC reflector)
+    message(STATUS "[nexus] enable support for reflector")
+endif()
 
 # =========================================
 # set up compile flags

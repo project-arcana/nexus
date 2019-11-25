@@ -20,4 +20,9 @@ struct after
 static constexpr struct exclusive_t
 {
 } exclusive;
+
+/// this test should have failed assertions
+static constexpr struct should_fail_t
+{
+} should_fail;
 }

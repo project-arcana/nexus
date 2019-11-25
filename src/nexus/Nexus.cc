@@ -23,6 +23,11 @@ nx::Test*& curr_test()
 }
 }
 nx::Test* nx::detail::get_current_test() { return curr_test(); }
+bool& nx::detail::is_silenced()
+{
+    thread_local static bool silenced = false;
+    return silenced;
+}
 
 void nx::Nexus::applyCmdArgs(int argc, char** argv)
 {
@@ -74,22 +79,41 @@ int nx::Nexus::run()
     auto failed_assertions = 0;
     for (auto t : tests_to_run)
     {
+        // prepare
         detail::number_of_assertions() = 0;
         detail::number_of_failed_assertions() = 0;
         curr_test() = t;
+        detail::is_silenced() = t->mShouldFail;
+
+        // execute and measure
         auto const start_thread = std::this_thread::get_id();
         auto const start = std::chrono::high_resolution_clock::now();
         t->function()();
         auto const end = std::chrono::high_resolution_clock::now();
         auto const end_thread = std::this_thread::get_id();
+
+        // report
         curr_test() = nullptr;
         t->mAssertions = detail::number_of_assertions();
         t->mFailedAssertions = detail::number_of_failed_assertions();
-        if (t->hasFailed())
-            fails++;
+        if (t->mShouldFail)
+        {
+            if (!t->hasFailed())
+            {
+                fails++;
+                std::cerr << "Test [" << t->name().c_str() << "] should have failed but didn't." << std::endl;
+                std::cerr << "  in " << t->file().c_str() << ":" << t->line() << std::endl;
+            }
+        }
+        else
+        {
+            if (t->hasFailed())
+                fails++;
+            failed_assertions += t->mFailedAssertions;
+        }
         assertions += t->mAssertions;
-        failed_assertions += t->mFailedAssertions;
 
+        // output
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 

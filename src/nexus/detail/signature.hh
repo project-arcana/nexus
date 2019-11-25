@@ -3,6 +3,7 @@
 #include <type_traits>
 
 #include <clean-core/forward.hh>
+#include <clean-core/macros.hh>
 
 namespace nx::detail
 {
@@ -42,11 +43,6 @@ signature<R(Args...)> make_signature(R (*)(Args...))
 {
     return {};
 }
-template <class R, class... Args>
-signature<R(Args...)> make_signature(R (*)(Args...) noexcept)
-{
-    return {};
-}
 template <class T, class R>
 signature<R(T&)> make_signature(R T::*)
 {
@@ -62,6 +58,13 @@ signature<R(T const&, Args...)> make_signature(R (T::*)(Args...) const)
 {
     return {};
 }
+
+#ifndef CC_COMPILER_MSVC
+template <class R, class... Args>
+signature<R(Args...)> make_signature(R (*)(Args...) noexcept)
+{
+    return {};
+}
 template <class T, class R, class... Args>
 signature<R(T&, Args...)> make_signature(R (T::*)(Args...) noexcept)
 {
@@ -72,6 +75,8 @@ signature<R(T const&, Args...)> make_signature(R (T::*)(Args...) const noexcept)
 {
     return {};
 }
+#endif
+
 template <class F>
 auto make_signature(F&&)
 {
@@ -96,6 +101,8 @@ auto make_function(R (T::*f)(Args...) const)
 {
     return [f](T const& v, Args... args) -> R { return (v.*f)(cc::forward<Args>(args)...); };
 }
+
+#ifndef CC_COMPILER_MSVC
 template <class T, class R, class... Args>
 auto make_function(R (T::*f)(Args...) noexcept)
 {
@@ -106,6 +113,8 @@ auto make_function(R (T::*f)(Args...) const noexcept)
 {
     return [f](T const& v, Args... args) -> R { return (v.*f)(cc::forward<Args>(args)...); };
 }
+#endif
+
 template <class F>
 auto make_function(F&& f)
 {

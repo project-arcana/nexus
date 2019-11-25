@@ -5,6 +5,8 @@
 #include <clean-core/string.hh>
 #include <clean-core/vector.hh>
 
+#include <nexus/config.hh>
+
 namespace nx
 {
 /**
@@ -19,24 +21,36 @@ public:
     int line() const { return mLine; }
     cc::string const& functionName() const { return mFunctionName; }
     test_fun_t function() const { return mFunction; }
+    size_t seed() const { return mSeed; }
     bool isExclusive() const { return mIsExclusive; }
     bool hasFailed() const { return mFailedAssertions > 0; }
     int assertions() const { return mAssertions; }
     int failedAssertions() const { return mFailedAssertions; }
+    bool shouldFail() const { return mShouldFail; }
+    bool isEndless() const { return mIsEndless; }
+    bool shouldReproduce() const { return mReproduction.valid; }
+    reproduce reproduction() const { return mReproduction; }
+    bool isEnabled() const { return mIsEnabled; }
 
     // methods
 public:
     void setExclusive() { mIsExclusive = true; }
     void setShouldFail() { mShouldFail = true; }
+    void setEndless() { mIsEndless = true; }
+    void setDisabled() { mIsEnabled = false; }
+    void setReproduce(reproduce r) { mReproduction = r; }
     void addAfterPattern(cc::string pattern) { mAfterPatterns.push_back(cc::move(pattern)); }
     void addBeforePattern(cc::string pattern) { mBeforePatterns.push_back(cc::move(pattern)); }
 
+    void overwriteSeed(size_t s)
+    {
+        mSeed = s;
+        mSeedOverwritten = true;
+    }
+
     // ctor
 public:
-    Test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun)
-      : mName(name), mFile(file), mLine(line), mFunctionName(fun_name), mFunction(fun)
-    {
-    }
+    Test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun);
 
     Test(Test const&) = delete;
     Test(Test&&) = delete;
@@ -50,12 +64,19 @@ private:
     int mLine;
     cc::string mFunctionName;
     test_fun_t mFunction;
+    size_t mSeed;
 
     int mAssertions = 0;
     int mFailedAssertions = 0;
 
     bool mIsExclusive = false;
     bool mShouldFail = false;
+    bool mSeedOverwritten = false;
+    bool mIsEndless = false;
+    bool mIsEnabled = true;
+
+    reproduce mReproduction = reproduce::none();
+
     cc::vector<cc::string> mAfterPatterns;
     cc::vector<cc::string> mBeforePatterns;
 
@@ -67,5 +88,6 @@ namespace detail
 cc::vector<cc::unique_ptr<Test>>& get_all_tests();
 Test* get_current_test(); // TODO: discuss if and how this should be open API
 bool& is_silenced();      // TODO: discuss if and how this should be open API
+bool& always_terminate(); // TODO: discuss if and how this should be open API
 }
 }

@@ -28,3 +28,18 @@ Test* detail::register_test(const char* name, const char* file, int line, char c
     get_all_tests().push_back(std::move(t));
     return t_ptr;
 }
+
+void detail::configure(Test* t, const seed& v) { t->overwriteSeed(v.value); }
+
+size_t nx::get_seed()
+{
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t && "no active test");
+    return t->seed();
+}
+
+void detail::configure(Test* t, const endless_t&) { t->setEndless(); }
+
+void detail::configure(Test* t, const reproduce& r) { t->setReproduce(r); }
+
+void detail::configure(Test* t, const disabled_t&) { t->setDisabled(); }

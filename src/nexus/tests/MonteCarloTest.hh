@@ -89,6 +89,8 @@ public:
 
     // impls
 private:
+    void tryExecuteMachineNormally(cc::vector<int>& trace);
+
     template <class F, class R, class A, class B>
     void implTestEquivalence(F&& test, detail::signature<R(A, B)>)
     {

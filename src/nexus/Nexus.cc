@@ -3,6 +3,7 @@
 #include <nexus/check.hh>
 #include <nexus/tests/Test.hh>
 
+#include <clean-core/hash.hh>
 #include <clean-core/string_view.hh>
 #include <clean-core/unique_ptr.hh>
 
@@ -28,6 +29,11 @@ bool& nx::detail::is_silenced()
     thread_local static bool silenced = false;
     return silenced;
 }
+bool& nx::detail::always_terminate()
+{
+    thread_local static bool terminate = false;
+    return terminate;
+}
 
 void nx::Nexus::applyCmdArgs(int argc, char** argv)
 {
@@ -45,7 +51,10 @@ int nx::Nexus::run()
 {
     auto const& tests = detail::get_all_tests();
 
+    auto seed = cc::make_hash(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+
     cc::vector<Test*> tests_to_run;
+    auto disabled_tests = 0;
     for (auto const& t : tests)
     {
         auto do_run = true;
@@ -56,9 +65,17 @@ int nx::Nexus::run()
                 if (s == t->name())
                     do_run = true;
         }
+        if (!t->isEnabled())
+            do_run = false;
 
         if (!do_run)
+        {
+            disabled_tests++;
             continue;
+        }
+
+        if (!t->mSeedOverwritten)
+            t->mSeed = seed;
 
         tests_to_run.push_back(t.get());
     }
@@ -66,7 +83,11 @@ int nx::Nexus::run()
     std::cout << "[nexus] nexus version 0.0.1" << std::endl;
     std::cout << "[nexus] run with '--help' for options" << std::endl;
     std::cout << "[nexus] detected " << tests.size() << (tests.size() == 1 ? " test" : " tests") << std::endl;
-    std::cout << "[nexus] running " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests") << std::endl;
+    std::cout << "[nexus] running " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests");
+    if (disabled_tests > 0)
+        std::cout << " (" << disabled_tests << " disabled)";
+    std::cout << std::endl;
+    std::cout << "[nexus] seed " << seed << std::endl;
     std::cout << "==============================================================================" << std::endl;
     std::cout << std::setprecision(4);
     // TODO
@@ -84,6 +105,7 @@ int nx::Nexus::run()
         detail::number_of_failed_assertions() = 0;
         curr_test() = t;
         detail::is_silenced() = t->mShouldFail;
+        detail::always_terminate() = false;
 
         // execute and measure
         auto const start_thread = std::this_thread::get_id();
@@ -140,7 +162,7 @@ int nx::Nexus::run()
     std::cout.flush();
     std::cerr.flush();
     std::cout << "==============================================================================" << std::endl;
-    std::cout << "[nexus] passed " << tests.size() - fails << " of " << tests.size() << (tests.size() == 1 ? " test" : " tests") << " in "
+    std::cout << "[nexus] passed " << tests_to_run.size() - fails << " of " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests") << " in "
               << total_time_ms << " ms";
     if (fails > 0)
         std::cout << " (" << fails << " failed)";
@@ -153,6 +175,14 @@ int nx::Nexus::run()
         std::cerr << "[nexus] ERROR: no tests found/selected" << std::endl;
     else if (fails > 0)
     {
+        for (auto const& t : tests)
+            if (t->hasFailed() != t->shouldFail())
+            {
+                std::cerr << "[nexus] test [" << t->name().c_str() << "] failed (seed " << t->seed();
+                if (t->shouldReproduce())
+                    std::cerr << ", reproduce via TEST(..., reproduce(" << t->reproduction().seed << "))";
+                std::cerr << ")" << std::endl;
+            }
         std::cerr << "[nexus] ERROR: " << failed_assertions << " ASSERTION" << (failed_assertions == 1 ? "" : "S") << " FAILED" << std::endl;
         std::cerr << "[nexus] ERROR: " << fails << " TEST" << (fails == 1 ? "" : "S") << " FAILED" << std::endl;
     }

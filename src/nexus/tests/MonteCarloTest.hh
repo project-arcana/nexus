@@ -32,6 +32,7 @@ private:
     struct value;
     struct constant;
     struct function;
+    struct machine_trace;
 
     // setup
 public:
@@ -89,7 +90,11 @@ public:
 
     // impls
 private:
-    void tryExecuteMachineNormally(cc::vector<int>& trace);
+    void tryExecuteMachineNormally(machine_trace& trace);
+
+    /// tries to replace a trace
+    /// returns false if trace is invalid (e.g. violates a precondition)
+    bool replayTrace(machine_trace const& trace, bool print_mode = false);
 
     template <class F, class R, class A, class B>
     void implTestEquivalence(F&& test, detail::signature<R(A, B)>)
@@ -296,6 +301,22 @@ private:
         cc::unique_function<void(value const&, value const&)> test;
 
         equivalence(std::type_index a, std::type_index b) : type_a(a), type_b(b) {}
+    };
+
+    struct machine_trace
+    {
+        struct op
+        {
+            int function_idx = -1;
+            int args_start_idx = -1;
+            int return_value_idx = -1;
+        };
+
+        equivalence const* equiv = nullptr;
+        cc::vector<op> ops;
+        cc::vector<int> arg_indices;
+
+        void start(equivalence const* eq);
     };
 
     struct type_metadata

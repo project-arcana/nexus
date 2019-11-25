@@ -16,6 +16,11 @@
 #include <nexus/check.hh>
 #include <nexus/detail/signature.hh>
 
+#ifdef NX_HAS_REFLECTOR
+// TODO: this could be removed by some kind of manual to_string
+#include <reflector/to_string.hh>
+#endif
+
 namespace nx
 {
 // TODO: allow when for a subset of arguments as long as it's unambiguous
@@ -84,6 +89,8 @@ public:
 
     // impls
 private:
+    void tryExecuteMachineNormally(cc::vector<int>& trace);
+
     template <class F, class R, class A, class B>
     void implTestEquivalence(F&& test, detail::signature<R(A, B)>)
     {
@@ -317,6 +324,11 @@ private:
                 auto const& b = *static_cast<T const*>(vb.ptr);
                 CHECK(a == b);
             };
+
+#ifdef NX_HAS_REFLECTOR
+        if constexpr (rf::has_to_string<T>)
+            md.to_string = [](void* p) { return rf::to_string(*static_cast<T const*>(p)); };
+#endif
     }
 
     // members

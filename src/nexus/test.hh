@@ -38,34 +38,43 @@
 // second layer to make sure function is expanded
 #define NX_DETAIL_REGISTER_TEST(function, ...) NX_DETAIL_REGISTER_TEST2(function, __VA_ARGS__)
 
-#define NX_DETAIL_REGISTER_TEST2(function, ...)                                   \
-    static void function();                                                       \
-    namespace                                                                     \
-    {                                                                             \
-    struct _nx_register##function                                                 \
-    {                                                                             \
-        _nx_register##function()                                                  \
-        {                                                                         \
-            using namespace nx;                                                   \
-            ::nx::detail::build_test(__FILE__, __LINE__, &function, __VA_ARGS__); \
-        }                                                                         \
-    } _nx_obj_register##function;                                                 \
-    }                                                                             \
+#define NX_DETAIL_REGISTER_TEST2(function, ...)                                              \
+    static void function();                                                                  \
+    namespace                                                                                \
+    {                                                                                        \
+    struct _nx_register##function                                                            \
+    {                                                                                        \
+        _nx_register##function()                                                             \
+        {                                                                                    \
+            using namespace nx;                                                              \
+            ::nx::detail::build_test(__FILE__, __LINE__, #function, &function, __VA_ARGS__); \
+        }                                                                                    \
+    } _nx_obj_register##function;                                                            \
+    }                                                                                        \
     static void function()
 
 namespace nx
 {
+/// returns the seed to be used for the current test
+/// NOTE: only valid inside a test!
+size_t get_seed();
+
 namespace detail
 {
-Test* register_test(char const* name, char const* file, int line, test_fun_t fun);
+Test* register_test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun);
 void configure(Test* t, before const& v);
 void configure(Test* t, after const& v);
 void configure(Test* t, exclusive_t const&);
+void configure(Test* t, should_fail_t const&);
+void configure(Test* t, seed const& v);
+void configure(Test* t, endless_t const&);
+void configure(Test* t, reproduce const& r);
+void configure(Test* t, disabled_t const&);
 
 template <class... Args>
-void build_test(char const* file, int line, test_fun_t fun, char const* name, Args&&... args)
+void build_test(char const* file, int line, char const* fun_name, test_fun_t fun, char const* name, Args&&... args)
 {
-    auto t = register_test(name, file, line, fun);
+    auto t = register_test(name, file, line, fun_name, fun);
     ((configure(t, args)), ...);
 }
 }

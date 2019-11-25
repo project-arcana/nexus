@@ -1,25 +1,37 @@
 #include "check.hh"
 
 // TODO: replace with proper log
-#include <exception>
 #include <iostream>
+
+#include <nexus/detail/exception.hh>
+#include <nexus/tests/Test.hh>
+
+#include <clean-core/assert.hh>
 
 void nx::detail::report_failed_check(nx::detail::check_result const& r, const char* check, const char* file, int line, char const* function, bool terminate)
 {
-    std::cerr << "CHECK( " << check << " ) failed." << std::endl;
-    std::cerr << "  in " << file << ":" << line << std::endl;
-    std::cerr << "  function " << function << std::endl;
-    if (r.lhs && !r.rhs)
-        std::cout << "  value: " << r.lhs << std::endl;
-    else if (r.lhs && r.rhs)
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t != nullptr && "CHECK(...) is only valid inside tests");
+
+    // log if not silenced
+    if (!nx::detail::is_silenced())
     {
-        std::cout << "  lhs: " << r.lhs << std::endl;
-        std::cout << "  rhs: " << r.rhs << std::endl;
+        std::cerr << "CHECK( " << check << " ) failed." << std::endl;
+
+        if (!r.op)
+            std::cerr << "  value: " << r.lhs.c_str() << std::endl;
+        else
+        {
+            std::cerr << "  lhs: " << r.lhs.c_str() << std::endl;
+            std::cerr << "  rhs: " << r.rhs.c_str() << std::endl;
+        }
+
+        std::cerr << "  at line " << file << ":" << line << std::endl;
+        std::cerr << "  in test " << t->file().c_str() << ":" << t->line() << std::endl;
+        if (t->functionName() != function) // TODO: properly?
+            std::cerr << "  in function " << function << std::endl;
     }
 
-    // TODO: delete r.lhs and r.rhs
-
-    // TODO: make custom exception
-    if (terminate)
-        throw std::logic_error("test assertion failed");
+    if (terminate || nx::detail::always_terminate())
+        throw assertion_failed_exception();
 }

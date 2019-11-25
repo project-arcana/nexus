@@ -5,6 +5,10 @@
 #include <clean-core/has_operator.hh>
 #include <clean-core/macros.hh>
 
+#ifdef NX_HAS_REFLECTOR
+// TODO: this could be removed by some kind of manual to_string
+#include <reflector/to_string.hh>
+#endif
 
 #ifndef NX_FORCE_MACRO_PREFIX
 
@@ -59,12 +63,44 @@ inline int& number_of_failed_assertions()
     return cnt;
 }
 
+template <class T>
+cc::string make_string_repr(T const& v)
+{
+    cc::string s;
+    // TODO: some basic to_string in case reflector is not available
+#ifdef NX_HAS_REFLECTOR
+    if constexpr (rf::has_to_string<T>)
+        s = rf::to_string(v);
+    else
+#endif
+        s = "???";
+    return s;
+}
+
 struct check_result
 {
     bool is_true = false;
-    // NOTE: these are only allocated on failure and are freed inside report_failed_check
-    char const* lhs = nullptr;
-    char const* rhs = nullptr;
+    cc::string lhs;
+    cc::string rhs;
+    char const* op = nullptr;
+
+    check_result() = default;
+
+    template <class A, class B>
+    check_result(bool is_true, A const& a, B const& b, char const* op) : is_true(is_true), op(op)
+    {
+        if (!is_true)
+        {
+            lhs = ::nx::detail::make_string_repr(a);
+            rhs = ::nx::detail::make_string_repr(b);
+        }
+    }
+    template <class A>
+    check_result(bool is_true, A const& a) : is_true(is_true)
+    {
+        if (!is_true)
+            lhs = ::nx::detail::make_string_repr(a);
+    }
 
     NX_IMPL_FORBID_COMPLEX_CHAIN;
 };
@@ -78,43 +114,43 @@ struct checker
     check_result operator<(R&& rhs) const
     {
         static_assert(cc::has_operator_equal<T, R>, "operator< is not defined for the arguments");
-        return {bool(value < rhs)}; // TODO: to_string
+        return {bool(value < rhs), value, rhs, "<"};
     }
     template <class R>
     check_result operator<=(R&& rhs) const
     {
         static_assert(cc::has_operator_equal<T, R>, "operator<= is not defined for the arguments");
-        return {bool(value <= rhs)}; // TODO: to_string
+        return {bool(value <= rhs), value, rhs, "<="};
     }
     template <class R>
     check_result operator>(R&& rhs) const
     {
         static_assert(cc::has_operator_equal<T, R>, "operator> is not defined for the arguments");
-        return {bool(value > rhs)}; // TODO: to_string
+        return {bool(value > rhs), value, rhs, ">"};
     }
     template <class R>
     check_result operator>=(R&& rhs) const
     {
         static_assert(cc::has_operator_equal<T, R>, "operator>= is not defined for the arguments");
-        return {bool(value >= rhs)}; // TODO: to_string
+        return {bool(value >= rhs), value, rhs, ">="};
     }
     template <class R>
     check_result operator==(R&& rhs) const
     {
         static_assert(cc::has_operator_equal<T, R>, "operator== is not defined for the arguments");
-        return {bool(value == rhs)}; // TODO: to_string
+        return {bool(value == rhs), value, rhs, "=="};
     }
     template <class R>
     check_result operator!=(R&& rhs) const
     {
         static_assert(cc::has_operator_not_equal<T, R>, "operator!= is not defined for the arguments");
-        return {bool(value != rhs)}; // TODO: to_string
+        return {bool(value != rhs), value, rhs, "!="};
     }
 
     operator check_result() const
     {
         static_assert(std::is_constructible_v<bool, T>, "cannot convert argument to bool");
-        return {bool(value)}; // TODO
+        return {bool(value), value};
     }
 
     NX_IMPL_FORBID_COMPLEX_CHAIN;

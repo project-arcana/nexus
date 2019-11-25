@@ -7,9 +7,12 @@
 
 #include <typed-geometry/feature/random.hh>
 
+#include <nexus/detail/exception.hh>
 #include <nexus/test.hh>
+#include <nexus/tests/Test.hh>
 
 #include <iostream> // DEBUG!
+#include <string>
 
 #include <map>
 #include <set>
@@ -46,7 +49,10 @@ struct nx::MonteCarloTest::machine
     {
         auto a = cc::array<function*>(funs.size());
         for (size_t i = 0; i < a.size(); ++i)
+        {
             a[i] = &funs[i];
+            CC_ASSERT(int(i) == a[i]->internal_idx);
+        }
         return build(test, a);
     }
     static machine build(MonteCarloTest const& test, cc::span<function*> funs)
@@ -204,7 +210,7 @@ struct nx::MonteCarloTest::machine
                 CC_ASSERT(!vars.empty());
                 auto ai = uniform(rng, size_t(0), vars.size() - 1);
                 args[i] = &vars[ai];
-                arg_indices[i] = ai;
+                arg_indices[i] = int(ai);
             }
 
             // check precondition
@@ -223,7 +229,7 @@ struct nx::MonteCarloTest::machine
         f->executions++;
 
         // invariants for reference args
-        for (size_t i = 0; i < f->arity(); ++i)
+        for (int i = 0; i < f->arity(); ++i)
             if (f->arg_types_could_change[i])
                 execute_invariants_for(*args[i]);
 
@@ -234,17 +240,24 @@ struct nx::MonteCarloTest::machine
         return v;
     }
 
-    void integrate_value(tg::rng& rng, value v)
+    int integrate_value(tg::rng& rng, value v)
     {
         if (v.is_void())
-            return;
+            return -1;
 
         // add value (either new or replace)
         auto& vs = values.at(v.type);
         if (uniform(rng, 0.0f, 1.0f) <= 1 / (1.f + vs.vars.size()))
+        {
             vs.vars.emplace_back(cc::move(v));
+            return int(vs.vars.size()) - 1;
+        }
         else
-            random_choice(rng, vs.vars) = cc::move(v);
+        {
+            auto idx = uniform(rng, 0, int(vs.vars.size()) - 1);
+            vs.vars[idx] = cc::move(v);
+            return idx;
+        }
     }
 
     function* try_generate_values_for(tg::rng& rng, function* ref, cc::span<value*> arg_buffer, cc::span<int> index_buffer)
@@ -288,6 +301,29 @@ void nx::MonteCarloTest::addPostSessionCallback(cc::unique_function<void()> f)
 
 void nx::MonteCarloTest::execute()
 {
+    cc::vector<int> trace;
+
+    CC_ASSERT(!nx::detail::get_current_test()->shouldFail() && "should-fail tests not supported for MCT");
+
+    // TODO: replace assertion handlers
+    nx::detail::is_silenced() = true;
+    nx::detail::always_terminate() = true;
+
+    // first: try normal execution
+    try
+    {
+        tryExecuteMachineNormally(trace);
+    }
+    catch (nx::detail::assertion_failed_exception const&)
+    {
+        // on fail: try to minimize trace
+    }
+
+    nx::detail::always_terminate() = false;
+}
+
+void nx::MonteCarloTest::tryExecuteMachineNormally(cc::vector<int>& trace)
+{
     // pre callbacks
     for (auto& f : mPreCallbacks)
         f();
@@ -302,10 +338,12 @@ void nx::MonteCarloTest::execute()
     // normal mode: no equivalence checking
     if (mEquivalences.empty())
     {
-        // TODO: seed
         tg::rng rng;
+        rng.seed(get_seed());
 
         // build machine
+        for (auto i = 0; i < int(mFunctions.size()); ++i)
+            mFunctions[i].internal_idx = i;
         auto m = machine::build(*this, mFunctions);
         REQUIRE(m.is_properly_set_up());
 
@@ -349,8 +387,14 @@ void nx::MonteCarloTest::execute()
 
             // execute function
             auto v = m.execute(f, args);
-            m.integrate_value(rng, cc::move(v));
+            auto vi = m.integrate_value(rng, cc::move(v));
             unsuccessful_count = 0;
+
+            // trace
+            trace.push_back(f->internal_idx);
+            trace.push_back(vi);
+            for (auto ai : arg_indices)
+                trace.push_back(ai);
 
             // remove satisfied test functions
             m.remove_fulfilled_test_functions();
@@ -503,7 +547,8 @@ void nx::MonteCarloTest::execute()
                 if (f_b->precondition)
                     CC_ASSERT(f_b->precondition(args_b) && "first precondition was true but second was not");
             };
-            auto const bi_execution = [this, &m_a, &m_b, &e](tg::rng& rng, function* f_a, function* f_b, cc::span<value*> args_a, cc::span<value*> args_b) {
+            auto const bi_execution = [this, &m_a, &m_b, &e, &trace](tg::rng& rng, function* f_a, function* f_b, cc::span<value*> args_a,
+                                                                     cc::span<value*> args_b, cc::span<int> arg_indices) {
                 CC_ASSERT(f_a->internal_idx == f_b->internal_idx);
                 CC_ASSERT(f_a->arity() == f_b->arity());
                 CC_ASSERT(f_a->arity() == int(args_a.size()));
@@ -548,8 +593,15 @@ void nx::MonteCarloTest::execute()
 
                 // reintegrate values
                 auto rng_b = rng; // copy
-                m_a.integrate_value(rng, cc::move(va));
-                m_b.integrate_value(rng_b, cc::move(vb));
+                auto vi = m_a.integrate_value(rng, cc::move(va));
+                auto vi2 = m_b.integrate_value(rng_b, cc::move(vb));
+                CC_ASSERT(vi == vi2);
+
+                // trace
+                trace.push_back(f_a->internal_idx);
+                trace.push_back(vi);
+                for (auto ai : arg_indices)
+                    trace.push_back(ai);
             };
 
             // execute
@@ -592,7 +644,7 @@ void nx::MonteCarloTest::execute()
                         args_b = cc::span<value*>(args_buffer_b.data(), ff_b->arity());
 
                         prepare_execution_b(ff_b, arg_indices, args_b);
-                        bi_execution(rng, ff_a, ff_b, args_a, args_b);
+                        bi_execution(rng, ff_a, ff_b, args_a, args_b, arg_indices);
                     }
 
                     ++unsuccessful_count;
@@ -603,7 +655,7 @@ void nx::MonteCarloTest::execute()
                 prepare_execution_b(f_b, arg_indices, args_b);
 
                 // execute function
-                bi_execution(rng, f_a, f_b, args_a, args_b);
+                bi_execution(rng, f_a, f_b, args_a, args_b, arg_indices);
                 unsuccessful_count = 0;
 
                 // remove satisfied test functions

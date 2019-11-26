@@ -1,13 +1,18 @@
 #include "MonteCarloTest.hh"
 
 #include <clean-core/array.hh>
+#include <clean-core/base64.hh>
 #include <clean-core/defer.hh>
 #include <clean-core/pair.hh>
 #include <clean-core/span.hh>
 
 #include <typed-geometry/feature/random.hh>
+#include <typed-geometry/functions/minmax.hh>
+#include <typed-geometry/tg-lean.hh>
 
+#include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
+#include <nexus/minimize_options.hh>
 #include <nexus/test.hh>
 #include <nexus/tests/Test.hh>
 
@@ -45,22 +50,134 @@ struct nx::MonteCarloTest::machine
         return true;
     }
 
+    static std::pair<machine, machine> build_equivalence_checker(MonteCarloTest& test, equivalence const& e, cc::vector<function*>& funs_a, cc::vector<function*>& funs_b)
+    {
+        std::set<function*> eq_funs;
+        std::map<std::type_index, std::map<std::string, function*>> eq_funs_by_type;
+
+        // register functions related to the equivalences
+        for (auto const& e : test.mEquivalences)
+        {
+            auto skip_a = bool(eq_funs_by_type.count(e.type_a));
+            auto skip_b = bool(eq_funs_by_type.count(e.type_b));
+
+            for (auto& f : test.mFunctions)
+            {
+                auto is_eq_a = false;
+                auto is_eq_b = false;
+
+                is_eq_a |= f.return_type == e.type_a;
+                is_eq_b |= f.return_type == e.type_b;
+                for (auto a : f.arg_types)
+                {
+                    is_eq_a |= a == e.type_a;
+                    is_eq_b |= a == e.type_b;
+                }
+
+                CC_ASSERT(!(is_eq_a && is_eq_b) && "no function may 'bridge' between types checked for equivalence");
+
+                if (is_eq_a || is_eq_b)
+                    eq_funs.insert(&f);
+                if (is_eq_a && !skip_a)
+                {
+                    CC_ASSERT(!eq_funs_by_type[e.type_a].count(f.name.c_str()) && "functions checked for equivalence need unique names");
+                    eq_funs_by_type[e.type_a][f.name.c_str()] = &f;
+                }
+                if (is_eq_b && !skip_b)
+                {
+                    CC_ASSERT(!eq_funs_by_type[e.type_b].count(f.name.c_str()) && "functions checked for equivalence need unique names");
+                    eq_funs_by_type[e.type_b][f.name.c_str()] = &f;
+                }
+            }
+        }
+        CC_ASSERT(!eq_funs.empty() && "no functions found to check for equivalence");
+
+        // helper for collecting pairs of functions used for equivalence
+        auto const collect_functions = [&](std::type_index ta, std::type_index tb) {
+            cc::vector<cc::pair<function*, function*>> funs;
+
+            // unrelated funs
+            for (auto& f : test.mFunctions)
+                if (!eq_funs.count(&f) || f.is_invariant) // always add invariants
+                    funs.emplace_back(&f, &f);
+
+            // type related funs
+            for (auto const& [name, fa] : eq_funs_by_type.at(ta))
+            {
+                if (!eq_funs_by_type.at(tb).count(name))
+                {
+                    std::cerr << "operation '" << name << "' not found for type " << tb.name() << std::endl;
+                    std::cerr << "(note: an exact match is required, subtyping may interfere with this)" << std::endl;
+                }
+                CC_ASSERT(eq_funs_by_type.at(tb).count(name) && "all functions checked for equivalence need to be defined for both types");
+                auto fb = eq_funs_by_type.at(tb).at(name);
+                funs.emplace_back(fa, fb);
+
+                // either both or neither can have a precondition
+                REQUIRE(bool(fa->precondition) == bool(fb->precondition));
+            }
+
+            return funs;
+        };
+
+        // collect functions
+        auto funs = collect_functions(e.type_a, e.type_b);
+        for (auto i = 0; i < int(funs.size()); ++i)
+        {
+            auto f_a = funs[i].first;
+            auto f_b = funs[i].second;
+
+            funs_a.push_back(f_a);
+            funs_b.push_back(f_b);
+
+            if (!f_a->is_invariant)
+            {
+                if (f_a->return_type == e.type_a)
+                    CC_ASSERT(f_b->return_type == e.type_b);
+                else
+                    CC_ASSERT(f_a->return_type == f_b->return_type);
+
+                for (auto i = 0; i < f_a->arity(); ++i)
+                {
+                    CC_ASSERT(f_a->arg_types_could_change[i] == f_b->arg_types_could_change[i]);
+
+                    if (f_a->arg_types[i] == e.type_a)
+                        CC_ASSERT(f_b->arg_types[i] == e.type_b);
+                    else
+                        CC_ASSERT(f_a->arg_types[i] == f_b->arg_types[i]);
+                }
+            }
+        }
+
+        return {machine::build(test, funs_a), machine::build(test, funs_b)};
+    }
+
     static machine build(MonteCarloTest const& test, cc::span<function> funs)
     {
         auto a = cc::array<function*>(funs.size());
         for (size_t i = 0; i < a.size(); ++i)
-        {
             a[i] = &funs[i];
-            CC_ASSERT(int(i) == a[i]->internal_idx);
-        }
         return build(test, a);
     }
     static machine build(MonteCarloTest const& test, cc::span<function*> funs)
     {
         auto m = machine(&test);
 
+        // reset functions
         for (auto f : funs)
         {
+            f->executions = 0;
+            f->internal_idx = -1;
+        }
+
+        for (int i = 0; i < int(funs.size()); ++i)
+        {
+            auto f = funs[i];
+
+            // assign idx
+            CC_ASSERT(f->internal_idx == -1);
+            f->internal_idx = i;
+
             // touch args and return types
             for (auto a : f->arg_types)
                 m.values[a];
@@ -106,6 +223,8 @@ struct nx::MonteCarloTest::machine
             }
         }
 
+        REQUIRE(m.is_properly_set_up());
+
         return m;
     }
 
@@ -149,19 +268,6 @@ struct nx::MonteCarloTest::machine
             }
         }
     }
-
-    void execute_invariants_for(value& v)
-    {
-        for (auto const& f : values.at(v.type).invariants)
-        {
-            CC_ASSERT(f->arity() == 1 && "currently only unary invariants supported");
-            CC_ASSERT(f->arg_types[0] == v.type);
-            value* vp = &v;
-            auto iv = f->execute(cc::span<value*>(vp));
-            if (iv.type == typeid(bool))
-                CHECK(*static_cast<bool*>(iv.ptr));
-        }
-    };
 
     function* sample_suitable_test_function(tg::rng& rng, int max_tries = 500) const
     {
@@ -221,13 +327,21 @@ struct nx::MonteCarloTest::machine
         return max_tries >= 0;
     }
 
-    value execute(function* f, cc::span<value*> args)
+    value execute(function* f, cc::span<value*> args, bool exec_invariants = true)
     {
         CC_ASSERT(int(args.size()) == f->arity());
 
         auto v = f->execute(args);
         f->executions++;
 
+        if (exec_invariants)
+            execute_invariants_for(f, v, args);
+
+        return v;
+    }
+
+    void execute_invariants_for(function* f, value& v, cc::span<value*> args)
+    {
         // invariants for reference args
         for (int i = 0; i < f->arity(); ++i)
             if (f->arg_types_could_change[i])
@@ -236,28 +350,47 @@ struct nx::MonteCarloTest::machine
         // verify invariants for return type
         if (!v.is_void())
             execute_invariants_for(v);
-
-        return v;
     }
 
-    int integrate_value(tg::rng& rng, value v)
+    void execute_invariants_for(value& v)
+    {
+        for (auto const& f : values.at(v.type).invariants)
+        {
+            CC_ASSERT(f->arity() == 1 && "currently only unary invariants supported");
+            CC_ASSERT(f->arg_types[0] == v.type);
+            value* vp = &v;
+            auto iv = f->execute(cc::span<value*>(vp));
+            if (iv.type == typeid(bool))
+                CHECK(*static_cast<bool*>(iv.ptr));
+        }
+    };
+
+    void integrate_value(value v, int idx)
     {
         if (v.is_void())
+            return;
+
+        CC_ASSERT(idx >= 0);
+        auto& vs = values.at(v.type);
+
+        // ensure proper size
+        while (idx >= int(vs.vars.size()))
+            vs.vars.push_back({});
+
+        vs.vars[idx] = cc::move(v);
+    }
+
+    int generate_integrated_value_idx(tg::rng& rng, std::type_index type)
+    {
+        if (type == typeid(void))
             return -1;
 
         // add value (either new or replace)
-        auto& vs = values.at(v.type);
+        auto& vs = values.at(type);
         if (uniform(rng, 0.0f, 1.0f) <= 1 / (1.f + vs.vars.size()))
-        {
-            vs.vars.emplace_back(cc::move(v));
-            return int(vs.vars.size()) - 1;
-        }
+            return int(vs.vars.size());
         else
-        {
-            auto idx = uniform(rng, 0, int(vs.vars.size()) - 1);
-            vs.vars[idx] = cc::move(v);
-            return idx;
-        }
+            return uniform(rng, 0, int(vs.vars.size()) - 1);
     }
 
     function* try_generate_values_for(tg::rng& rng, function* ref, cc::span<value*> arg_buffer, cc::span<int> index_buffer)
@@ -301,13 +434,23 @@ void nx::MonteCarloTest::addPostSessionCallback(cc::unique_function<void()> f)
 
 void nx::MonteCarloTest::execute()
 {
-    cc::vector<int> trace;
+    machine_trace trace;
 
-    CC_ASSERT(!nx::detail::get_current_test()->shouldFail() && "should-fail tests not supported for MCT");
+    auto test = nx::detail::get_current_test();
 
-    // TODO: replace assertion handlers
+    CC_ASSERT(!test->shouldFail() && "should-fail tests not supported for MCT");
+    CC_ASSERT(!test->isEndless() && "endless mode not YET supported for MCT");
+
+    if (test->isDebug())
+    {
+        tryExecuteMachineNormally(trace);
+        return;
+    }
+
+    // prepare execution
     nx::detail::is_silenced() = true;
     nx::detail::always_terminate() = true;
+    // DEBUG nx::detail::overwrite_assertion_handlers();
 
     // first: try normal execution
     try
@@ -317,12 +460,27 @@ void nx::MonteCarloTest::execute()
     catch (nx::detail::assertion_failed_exception const&)
     {
         // on fail: try to minimize trace
+
+        std::cerr << "[nexus] MONTE_CARLO_TEST failed. Trying to generate minimal reproduction." << std::endl;
+        minimizeTrace(trace);
+        std::cerr << "[nexus] .. done. result:" << std::endl;
+
+        nx::detail::is_silenced() = false;
+        nx::detail::always_terminate() = false;
+        std::cout.flush();
+        std::cerr.flush();
+        replayTrace(trace, true);
+        std::cout.flush();
+        std::cerr.flush();
+
+        test->setReproduce(reproduce(trace.serialize_to_string(*this)));
     }
 
     nx::detail::always_terminate() = false;
+    nx::detail::reset_assertion_handlers();
 }
 
-void nx::MonteCarloTest::tryExecuteMachineNormally(cc::vector<int>& trace)
+void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
 {
     // pre callbacks
     for (auto& f : mPreCallbacks)
@@ -335,17 +493,29 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(cc::vector<int>& trace)
             f();
     };
 
+    // helper
+    auto const add_trace = [&trace](function* f, int vi, cc::span<int> arg_indices) {
+        CC_ASSERT(f->arity() == int(arg_indices.size()));
+
+        machine_trace::op op;
+        op.function_idx = f->internal_idx;
+        op.fun = f;
+        op.args_start_idx = int(trace.arg_indices.size());
+        op.return_value_idx = vi;
+        trace.ops.push_back(op);
+        for (auto ai : arg_indices)
+            trace.arg_indices.push_back(ai);
+    };
+
     // normal mode: no equivalence checking
     if (mEquivalences.empty())
     {
         tg::rng rng;
         rng.seed(get_seed());
+        trace.start(nullptr);
 
         // build machine
-        for (auto i = 0; i < int(mFunctions.size()); ++i)
-            mFunctions[i].internal_idx = i;
         auto m = machine::build(*this, mFunctions);
-        REQUIRE(m.is_properly_set_up());
 
         // execute
         auto args_buffer = cc::array<value*>::filled(m.max_arity(), nullptr);
@@ -374,159 +544,52 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(cc::vector<int>& trace)
             if (!ok)
             {
                 // execute other function
-                if (auto ff = m.try_generate_values_for(rng, f, args_buffer, arg_indices))
+                if (auto ff = m.try_generate_values_for(rng, f, args_buffer, index_buffer))
                 {
                     args = cc::span<value*>(args_buffer).subspan(0, ff->arity());
+
+                    // add trace
+                    auto vi = m.generate_integrated_value_idx(rng, ff->return_type);
+                    add_trace(ff, vi, cc::span<int>(index_buffer.data(), ff->arity()));
+
+                    // execute
                     auto v = m.execute(ff, args);
-                    m.integrate_value(rng, cc::move(v));
+                    m.integrate_value(cc::move(v), vi);
                 }
 
                 ++unsuccessful_count;
                 continue;
             }
 
+            // add trace
+            auto vi = m.generate_integrated_value_idx(rng, f->return_type);
+            add_trace(f, vi, arg_indices);
+
             // execute function
             auto v = m.execute(f, args);
-            auto vi = m.integrate_value(rng, cc::move(v));
+            m.integrate_value(cc::move(v), vi);
             unsuccessful_count = 0;
-
-            // trace
-            trace.push_back(f->internal_idx);
-            trace.push_back(vi);
-            for (auto ai : arg_indices)
-                trace.push_back(ai);
 
             // remove satisfied test functions
             m.remove_fulfilled_test_functions();
         }
-
-        // ~Machine() at scope end
     }
     else // equivalence checker
     {
-        std::set<function*> eq_funs;
-        std::map<std::type_index, std::map<std::string, function*>> eq_funs_by_type;
-
-        // register functions related to the equivalences
-        for (auto const& e : mEquivalences)
-        {
-            auto skip_a = bool(eq_funs_by_type.count(e.type_a));
-            auto skip_b = bool(eq_funs_by_type.count(e.type_b));
-
-            for (auto& f : mFunctions)
-            {
-                auto is_eq_a = false;
-                auto is_eq_b = false;
-
-                is_eq_a |= f.return_type == e.type_a;
-                is_eq_b |= f.return_type == e.type_b;
-                for (auto a : f.arg_types)
-                {
-                    is_eq_a |= a == e.type_a;
-                    is_eq_b |= a == e.type_b;
-                }
-
-                CC_ASSERT(!(is_eq_a && is_eq_b) && "no function may 'bridge' between types checked for equivalence");
-
-                if (is_eq_a || is_eq_b)
-                    eq_funs.insert(&f);
-                if (is_eq_a && !skip_a)
-                {
-                    CC_ASSERT(!eq_funs_by_type[e.type_a].count(f.name.c_str()) && "functions checked for equivalence need unique names");
-                    eq_funs_by_type[e.type_a][f.name.c_str()] = &f;
-                }
-                if (is_eq_b && !skip_b)
-                {
-                    CC_ASSERT(!eq_funs_by_type[e.type_b].count(f.name.c_str()) && "functions checked for equivalence need unique names");
-                    eq_funs_by_type[e.type_b][f.name.c_str()] = &f;
-                }
-            }
-        }
-        CC_ASSERT(!eq_funs.empty() && "no functions found to check for equivalence");
-
-        // helper for collecting pairs of functions used for equivalence
-        auto const collect_functions = [&](std::type_index ta, std::type_index tb) {
-            cc::vector<cc::pair<function*, function*>> funs;
-
-            // unrelated funs
-            for (auto& f : mFunctions)
-                if (!eq_funs.count(&f) || f.is_invariant) // always add invariants
-                    funs.emplace_back(&f, &f);
-
-            // type related funs
-            for (auto const& [name, fa] : eq_funs_by_type.at(ta))
-            {
-                if (!eq_funs_by_type.at(tb).count(name))
-                {
-                    std::cerr << "operation '" << name << "' not found for type " << tb.name() << std::endl;
-                    std::cerr << "(note: an exact match is required, subtyping may interfere with this)" << std::endl;
-                }
-                CC_ASSERT(eq_funs_by_type.at(tb).count(name) && "all functions checked for equivalence need to be defined for both types");
-                auto fb = eq_funs_by_type.at(tb).at(name);
-                funs.emplace_back(fa, fb);
-
-                // either both or neither can have a precondition
-                REQUIRE(bool(fa->precondition) == bool(fb->precondition));
-            }
-
-            return funs;
-        };
-
         // testing each equivalence
         for (auto const& e : mEquivalences)
         {
-            // reset functions
-            for (auto& f : mFunctions)
-            {
-                f.executions = 0;
-                f.internal_idx = -1;
-            }
-
-            // prepare functions
-            auto funs = collect_functions(e.type_a, e.type_b);
-            cc::vector<function*> funs_a;
-            cc::vector<function*> funs_b;
-            for (auto i = 0; i < int(funs.size()); ++i)
-            {
-                auto f_a = funs[i].first;
-                auto f_b = funs[i].second;
-
-                CC_ASSERT(f_a->internal_idx == -1);
-                CC_ASSERT(f_b->internal_idx == -1);
-
-                f_a->internal_idx = i;
-                f_b->internal_idx = i;
-
-                funs_a.push_back(f_a);
-                funs_b.push_back(f_b);
-
-                if (!f_a->is_invariant)
-                {
-                    if (f_a->return_type == e.type_a)
-                        CC_ASSERT(f_b->return_type == e.type_b);
-                    else
-                        CC_ASSERT(f_a->return_type == f_b->return_type);
-
-                    for (auto i = 0; i < f_a->arity(); ++i)
-                    {
-                        CC_ASSERT(f_a->arg_types_could_change[i] == f_b->arg_types_could_change[i]);
-
-                        if (f_a->arg_types[i] == e.type_a)
-                            CC_ASSERT(f_b->arg_types[i] == e.type_b);
-                        else
-                            CC_ASSERT(f_a->arg_types[i] == f_b->arg_types[i]);
-                    }
-                }
-            }
-
-            // TODO: seed
+            // seed rng
             tg::rng rng;
+            rng.seed(get_seed());
+            trace.start(&e);
 
             // prepare machines
-            auto m_a = machine::build(*this, funs_a);
-            auto m_b = machine::build(*this, funs_b);
-            REQUIRE(m_a.is_properly_set_up());
-            REQUIRE(m_b.is_properly_set_up());
+            cc::vector<function*> funs_a;
+            cc::vector<function*> funs_b;
+            auto machines = machine::build_equivalence_checker(*this, e, funs_a, funs_b);
+            auto& m_a = machines.first;
+            auto& m_b = machines.second;
             REQUIRE(m_a.max_arity() == m_b.max_arity());
 
             // helper functions
@@ -547,12 +610,16 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(cc::vector<int>& trace)
                 if (f_b->precondition)
                     CC_ASSERT(f_b->precondition(args_b) && "first precondition was true but second was not");
             };
-            auto const bi_execution = [this, &m_a, &m_b, &e, &trace](tg::rng& rng, function* f_a, function* f_b, cc::span<value*> args_a,
-                                                                     cc::span<value*> args_b, cc::span<int> arg_indices) {
+            auto const bi_execution = [this, &m_a, &m_b, &e, &add_trace](tg::rng& rng, function* f_a, function* f_b, cc::span<value*> args_a,
+                                                                         cc::span<value*> args_b, cc::span<int> arg_indices) {
                 CC_ASSERT(f_a->internal_idx == f_b->internal_idx);
                 CC_ASSERT(f_a->arity() == f_b->arity());
                 CC_ASSERT(f_a->arity() == int(args_a.size()));
                 CC_ASSERT(f_b->arity() == int(args_b.size()));
+
+                // add trace
+                auto vi = m_a.generate_integrated_value_idx(rng, f_a->return_type);
+                add_trace(f_a, vi, arg_indices);
 
                 auto va = m_a.execute(f_a, args_a);
                 auto vb = m_b.execute(f_b, args_b);
@@ -592,16 +659,8 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(cc::vector<int>& trace)
                     }
 
                 // reintegrate values
-                auto rng_b = rng; // copy
-                auto vi = m_a.integrate_value(rng, cc::move(va));
-                auto vi2 = m_b.integrate_value(rng_b, cc::move(vb));
-                CC_ASSERT(vi == vi2);
-
-                // trace
-                trace.push_back(f_a->internal_idx);
-                trace.push_back(vi);
-                for (auto ai : arg_indices)
-                    trace.push_back(ai);
+                m_a.integrate_value(cc::move(va), vi);
+                m_b.integrate_value(cc::move(vb), vi);
             };
 
             // execute
@@ -661,10 +720,303 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(cc::vector<int>& trace)
                 // remove satisfied test functions
                 m_a.remove_fulfilled_test_functions();
             }
-
-            // ~Machine() at scope end
         }
     }
+}
+
+void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
+{
+    auto found_smaller = true;
+
+    while (found_smaller) // TODO: time limit
+    {
+        std::cerr << "[nexus]   .. trace complexity " << trace.complexity() << std::endl;
+        auto opts = trace.build_minimizer();
+
+        found_smaller = false;
+        while (!found_smaller && opts.has_options_left())
+        {
+            // build new trace
+            auto new_t = opts.get_next_option_for(trace);
+            CC_ASSERT(new_t.complexity() < trace.complexity() && "operation did not reduce complexity");
+
+            try
+            {
+                // try new trace
+                replayTrace(new_t);
+            }
+            catch (nx::detail::assertion_failed_exception const&)
+            {
+                // found a smaller failing test
+                trace = new_t;
+                found_smaller = true;
+            }
+        }
+    }
+}
+
+bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode)
+{
+    if (print_mode)
+        std::cerr << "[nexus] =============== TRACE BEGIN ===============" << std::endl;
+    CC_DEFER
+    {
+        if (print_mode)
+            std::cerr << "[nexus] =============== TRACE END ===============" << std::endl;
+    };
+
+    // pre callbacks
+    if (print_mode && !mPreCallbacks.empty())
+        std::cerr << "[nexus]   executing pre-callbacks" << std::endl;
+    for (auto& f : mPreCallbacks)
+        f();
+
+    // post callbacks
+    CC_DEFER
+    {
+        if (print_mode && !mPostCallbacks.empty())
+            std::cerr << "[nexus]   executing post-callbacks" << std::endl;
+        for (auto& f : mPostCallbacks)
+            f();
+    };
+
+    // var names
+    std::map<std::pair<std::type_index, int>, int> var_names;
+    auto const get_var_name = [&var_names](std::type_index t, int vi) {
+        if (var_names.count({t, vi}))
+            return var_names.at({t, vi});
+        auto n = int(var_names.size());
+        var_names[{t, vi}] = n;
+        return n;
+    };
+    auto const value_to_string = [this](value const& v) -> cc::string {
+        CC_ASSERT(!v.is_void());
+        if (!mTypeMetadata.count(v.type))
+            return "???";
+        auto const& f = mTypeMetadata.at(v.type).to_string;
+        if (!f)
+            return "???";
+        return f(v.ptr);
+    };
+
+    // print symbolic execution
+    if (print_mode)
+    {
+        std::cerr << "[nexus] symbolic:" << std::endl;
+        for (auto const& op : trace.ops)
+        {
+            std::cerr << "[nexus]   ";
+            if (op.return_value_idx != -1)
+                std::cerr << "v" << get_var_name(op.fun->return_type, op.return_value_idx) << " = ";
+            std::cerr << "[" << op.fun->name.c_str() << "]";
+            if (op.fun->arity() > 0)
+            {
+                std::cerr << "(";
+                for (auto ai = 0; ai < op.fun->arity(); ++ai)
+                {
+                    if (ai > 0)
+                        std::cerr << ", ";
+                    if (op.fun->arg_types_could_change[ai])
+                        std::cerr << "&";
+                    std::cerr << "v" << get_var_name(op.fun->arg_types[ai], trace.arg_indices[op.args_start_idx + ai]);
+                }
+                std::cerr << ")";
+            }
+            std::cerr << std::endl;
+        }
+        std::cerr << "[nexus] actual:" << std::endl;
+    }
+    auto const print_inputs = [&value_to_string](function* f, cc::span<value*> args, cc::span<cc::string> vals) {
+        std::cerr << "[nexus]   exec [" << f->name.c_str() << "]";
+        if (!args.empty())
+        {
+            std::cerr << "(";
+            for (auto ai = 0; ai < f->arity(); ++ai)
+            {
+                if (ai > 0)
+                    std::cerr << ", ";
+                vals[ai] = value_to_string(*args[ai]);
+                std::cerr << vals[ai].c_str();
+            }
+            std::cerr << ")";
+        }
+        std::cerr << std::endl;
+    };
+    auto const print_outputs = [&value_to_string](function* f, value const& v, cc::span<value*> args, cc::span<const cc::string> vals) {
+        std::cerr << "[nexus]        [" << f->name.c_str() << "]";
+        if (!args.empty())
+        {
+            std::cerr << "(";
+            for (auto ai = 0; ai < f->arity(); ++ai)
+            {
+                if (ai > 0)
+                    std::cerr << ", ";
+                auto s = value_to_string(*args[ai]);
+                if (f->arg_types_could_change[ai])
+                    std::cerr << vals[ai].c_str() << " -> " << s.c_str();
+                else
+                {
+                    CC_ASSERT(s == vals[ai] && "input should not have changed");
+                    std::cerr << s.c_str();
+                }
+            }
+            std::cerr << ")";
+        }
+        if (f->return_type != typeid(void))
+            std::cerr << " -> " << value_to_string(v).c_str();
+        std::cerr << std::endl;
+    };
+
+    // normal mode: no equivalence checking
+    if (trace.equiv == nullptr)
+    {
+        tg::rng rng;
+        rng.seed(get_seed());
+
+        // build machine
+        auto m = machine::build(*this, mFunctions);
+
+        // execute
+        auto args_buffer = cc::array<value*>::filled(m.max_arity(), nullptr);
+        auto arg_string_buffer = cc::array<cc::string>::defaulted(m.max_arity());
+
+        for (auto const& op : trace.ops)
+        {
+            auto f = &mFunctions[op.function_idx];
+            CC_ASSERT(f == op.fun);
+
+            // collect arguments
+            auto args = cc::span<value*>(args_buffer.data(), f->arity());
+            for (auto i = 0; i < f->arity(); ++i)
+                args[i] = &m.values[f->arg_types[i]].vars[trace.arg_indices[op.args_start_idx + i]];
+
+            // print trace
+            if (print_mode)
+                print_inputs(f, args, arg_string_buffer);
+
+            // check precondition
+            if (f->precondition && !f->precondition(args))
+                return false; // precondition violated, i.e. invalid trace
+
+            // execute function (no invariants)
+            auto v = m.execute(f, args, false);
+
+            // print outputs
+            if (print_mode)
+                print_outputs(f, v, args, arg_string_buffer);
+
+            // check invariants
+            m.execute_invariants_for(f, v, args);
+
+            // reintegrate values
+            m.integrate_value(cc::move(v), op.return_value_idx);
+        }
+    }
+    else // equivalence checker
+    {
+        auto const& e = *trace.equiv;
+
+        // seed rng
+        tg::rng rng;
+        rng.seed(get_seed());
+
+        // prepare machines
+        cc::vector<function*> funs_a;
+        cc::vector<function*> funs_b;
+        auto machines = machine::build_equivalence_checker(*this, e, funs_a, funs_b);
+        auto& m_a = machines.first;
+        auto& m_b = machines.second;
+        REQUIRE(m_a.max_arity() == m_b.max_arity());
+        CC_ASSERT(funs_a.size() == funs_b.size());
+
+        // execute
+        auto args_buffer_a = cc::array<value*>::filled(m_a.max_arity(), nullptr);
+        auto args_buffer_b = cc::array<value*>::filled(m_a.max_arity(), nullptr);
+        auto arg_string_buffer_a = cc::array<cc::string>::defaulted(m_a.max_arity());
+        auto arg_string_buffer_b = cc::array<cc::string>::defaulted(m_a.max_arity());
+        for (auto const& op : trace.ops)
+        {
+            auto f_a = funs_a[op.function_idx];
+            auto f_b = funs_a[op.function_idx];
+
+            // collect arguments
+            auto args_a = cc::span<value*>(args_buffer_a.data(), f_a->arity());
+            auto args_b = cc::span<value*>(args_buffer_b.data(), f_b->arity());
+            for (auto i = 0; i < f_a->arity(); ++i)
+            {
+                args_a[i] = &m_a.values[f_a->arg_types[i]].vars[trace.arg_indices[op.args_start_idx + i]];
+                args_b[i] = &m_b.values[f_b->arg_types[i]].vars[trace.arg_indices[op.args_start_idx + i]];
+            }
+
+            // print trace
+            if (print_mode)
+            {
+                print_inputs(f_a, args_a, arg_string_buffer_a);
+                print_inputs(f_b, args_b, arg_string_buffer_b);
+            }
+
+            // check precondition
+            if (f_a->precondition && !f_a->precondition(args_a))
+                return false; // precondition violated, i.e. invalid trace
+            if (f_b->precondition && !f_b->precondition(args_b))
+                return false; // precondition violated, i.e. invalid trace
+
+            // execute function
+            auto va = m_a.execute(f_a, args_a, false);
+            auto vb = m_b.execute(f_b, args_b, false);
+
+            // print outputs
+            if (print_mode)
+            {
+                print_outputs(f_a, va, args_a, arg_string_buffer_a);
+                print_outputs(f_b, vb, args_b, arg_string_buffer_b);
+            }
+
+            // check invariants
+            m_a.execute_invariants_for(f_a, va, args_a);
+            m_b.execute_invariants_for(f_b, vb, args_b);
+
+            // test equivalence
+            if (va.type == e.type_a)
+            {
+                CC_ASSERT(vb.type == e.type_b && "type mismatch");
+                e.test(va, vb);
+            }
+            else
+            {
+                CC_ASSERT(va.type == vb.type && "type mismatch");
+                if (!va.is_void())
+                {
+                    CC_ASSERT(mTypeMetadata.count(va.type));
+                    if (auto const& test_eq = mTypeMetadata.at(va.type).check_equality)
+                        test_eq(va, vb);
+                }
+            }
+
+            for (auto i = 0; i < f_a->arity(); ++i)
+                if (f_a->arg_types_could_change[i])
+                {
+                    if (f_a->arg_types[i] == e.type_a)
+                    {
+                        CC_ASSERT(f_b->arg_types[i] == e.type_b && "type mismatch");
+                        e.test(*args_a[i], *args_b[i]);
+                    }
+                    else
+                    {
+                        CC_ASSERT(f_a->arg_types[i] == f_b->arg_types[i] && "type mismatch");
+                        CC_ASSERT(mTypeMetadata.count(f_a->arg_types[i]));
+                        if (auto const& test_eq = mTypeMetadata.at(f_a->arg_types[i]).check_equality)
+                            test_eq(*args_a[i], *args_b[i]);
+                    }
+                }
+
+            // add values
+            m_a.integrate_value(cc::move(va), op.return_value_idx);
+            m_b.integrate_value(cc::move(vb), op.return_value_idx);
+        }
+    }
+
+    return true;
 }
 
 void nx::MonteCarloTest::printSetup()
@@ -684,4 +1036,214 @@ void nx::MonteCarloTest::printSetup()
             std::cout << " [INVARIANT]";
         std::cout << std::endl;
     }
+}
+
+void nx::MonteCarloTest::machine_trace::start(equivalence const* eq)
+{
+    equiv = eq;
+
+    ops.clear();
+    ops.reserve(500);
+
+    arg_indices.clear();
+    arg_indices.reserve(500);
+}
+
+nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::machine_trace::build_minimizer() const
+{
+    nx::minimize_options<nx::MonteCarloTest::machine_trace> min;
+
+    struct var_info
+    {
+        bool has_reads = false;
+        bool has_writes = false;
+        int first_write = tg::max<int>();
+        int last_read = -1;
+    };
+
+    struct varset_info
+    {
+        cc::vector<var_info> vars;
+
+        void report_write(int step, int idx)
+        {
+            ensure_idx(idx);
+
+            auto& v = vars[idx];
+            v.has_writes = true;
+            v.first_write = tg::min(step, v.first_write);
+            // TODO
+        }
+        void report_read(int step, int idx)
+        {
+            ensure_idx(idx);
+
+            auto& v = vars[idx];
+            v.has_reads = true;
+            v.last_read = tg::max(step, v.last_read);
+            // TODO
+        }
+        void ensure_idx(int idx)
+        {
+            while (int(vars.size()) <= idx)
+                vars.push_back({});
+        }
+    };
+
+    std::map<std::type_index, varset_info> varsets;
+
+    // collect vars
+    for (auto i = 0; i < int(ops.size()); ++i)
+    {
+        auto const& op = ops[i];
+
+        if (op.return_value_idx != -1)
+            varsets[op.fun->return_type].report_write(i, op.return_value_idx);
+
+        for (auto ai = 0; ai < op.fun->arity(); ++ai)
+        {
+            auto& vs = varsets[op.fun->arg_types[ai]];
+            auto idx = arg_indices[op.args_start_idx + ai];
+
+            vs.report_read(i, idx);
+            if (op.fun->arg_types_could_change[ai])
+                vs.report_write(i, idx);
+        }
+    }
+
+    // try disabling functions
+    for (int i = 0; i < int(ops.size()); ++i)
+    {
+        auto const& op = ops[i];
+
+        auto can_disable = false;
+
+        if (op.return_value_idx == -1) // return void
+            can_disable = true;
+        else
+        {
+            auto const& vi = varsets.at(op.fun->return_type).vars[op.return_value_idx];
+
+            // not the first write
+            if (i > vi.first_write)
+                can_disable = true;
+
+            // no read afterwards
+            if (i > vi.last_read)
+                can_disable = true;
+        }
+
+        if (can_disable)
+            min.options.emplace_back([i](machine_trace const& old_t) {
+                auto t = old_t;
+                for (auto j = i + 1; j < int(t.ops.size()); ++j)
+                    t.ops[j - 1] = t.ops[j];
+                t.ops.pop_back();
+                return t;
+            });
+    }
+
+    // try to rename complete vars
+    for (auto const& kvp : varsets)
+    {
+        auto type = kvp.first;
+        CC_ASSERT(type != typeid(void));
+        auto const& vs = kvp.second;
+        for (int i_from = int(vs.vars.size()) - 1; i_from > 0; --i_from)
+        {
+            if (!vs.vars[i_from].has_reads && !vs.vars[i_from].has_writes)
+                continue; // unused var slot
+
+            for (int i_to = 0; i_to < i_from; ++i_to)
+                min.options.emplace_back([type, i_from, i_to](machine_trace const& old_t) {
+                    auto t = old_t;
+                    for (auto& op : t.ops)
+                    {
+                        // rename return val
+                        if (op.fun->return_type == type && op.return_value_idx == i_from)
+                            op.return_value_idx = i_to;
+
+                        // rename args
+                        for (auto ai = 0; ai < op.fun->arity(); ++ai)
+                            if (op.fun->arg_types[ai] == type && t.arg_indices[op.args_start_idx + ai] == i_from)
+                                t.arg_indices[op.args_start_idx + ai] = i_to;
+                    }
+                    return t;
+                });
+        }
+    }
+
+    // try to use different args
+    for (int i = 0; i < int(ops.size()); ++i)
+    {
+        auto const& op = ops[i];
+        for (auto ai = 0; ai < op.fun->arity(); ++ai)
+        {
+            auto vi = arg_indices[op.args_start_idx + ai];
+            auto const& vs = varsets.at(op.fun->arg_types[ai]);
+            for (auto j = 0; j < vi; ++j)
+            {
+                if (vs.vars[j].first_write >= i)
+                    continue; // var was not written before
+
+                min.options.emplace_back([i, ai, j](machine_trace const& old_t) {
+                    auto t = old_t;
+                    auto const& op = t.ops[i];
+                    t.arg_indices[op.args_start_idx + ai] = j;
+                    return t;
+                });
+            }
+        }
+    }
+
+    return min;
+}
+
+int nx::MonteCarloTest::machine_trace::complexity() const
+{
+    auto c = 0;
+
+    for (auto const& op : ops)
+    {
+        c++;
+
+        if (op.return_value_idx >= 0)
+            c += op.return_value_idx;
+
+        for (auto i = 0; i < op.fun->arity(); ++i)
+            c += arg_indices[op.args_start_idx + i];
+    }
+
+    return c;
+}
+
+cc::string nx::MonteCarloTest::machine_trace::serialize_to_string(MonteCarloTest const& test) const
+{
+    cc::vector<int> trace;
+
+    // equiv
+    if (!equiv)
+        trace.push_back(-1);
+    else
+    {
+        for (auto i = 0; i < int(test.mEquivalences.size()); ++i)
+            if (&test.mEquivalences[i] == equiv)
+            {
+                trace.push_back(i);
+                break;
+            }
+    }
+    CC_ASSERT(trace.size() == 1);
+
+    // serialize ops
+    for (auto const& op : ops)
+    {
+        trace.push_back(op.function_idx);
+        trace.push_back(op.return_value_idx);
+        trace.push_back(op.fun->arity());
+        for (auto ai = 0; ai < op.fun->arity(); ++ai)
+            trace.push_back(arg_indices[op.args_start_idx + ai]);
+    }
+
+    return cc::base64_encode(cc::span(trace).as_bytes());
 }

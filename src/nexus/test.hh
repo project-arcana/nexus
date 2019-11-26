@@ -70,6 +70,7 @@ void configure(Test* t, seed const& v);
 void configure(Test* t, endless_t const&);
 void configure(Test* t, reproduce const& r);
 void configure(Test* t, disabled_t const&);
+void configure(Test* t, debug_t const&);
 
 template <class... Args>
 void build_test(char const* file, int line, char const* fun_name, test_fun_t fun, char const* name, Args&&... args)

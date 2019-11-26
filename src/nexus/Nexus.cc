@@ -1,6 +1,8 @@
 #include "Nexus.hh"
 
 #include <nexus/check.hh>
+#include <nexus/detail/assertions.hh>
+#include <nexus/detail/exception.hh>
 #include <nexus/tests/Test.hh>
 
 #include <clean-core/hash.hh>
@@ -110,7 +112,19 @@ int nx::Nexus::run()
         // execute and measure
         auto const start_thread = std::this_thread::get_id();
         auto const start = std::chrono::high_resolution_clock::now();
-        t->function()();
+        if (t->isDebug())
+            t->function()();
+        else
+        {
+            try
+            {
+                t->function()();
+            }
+            catch (nx::detail::assertion_failed_exception const&)
+            {
+                // empty by design
+            }
+        }
         auto const end = std::chrono::high_resolution_clock::now();
         auto const end_thread = std::this_thread::get_id();
 
@@ -134,6 +148,11 @@ int nx::Nexus::run()
             failed_assertions += t->mFailedAssertions;
         }
         assertions += t->mAssertions;
+
+        // reset
+        nx::detail::is_silenced() = false;
+        nx::detail::always_terminate() = false;
+        nx::detail::reset_assertion_handlers();
 
         // output
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
@@ -162,8 +181,8 @@ int nx::Nexus::run()
     std::cout.flush();
     std::cerr.flush();
     std::cout << "==============================================================================" << std::endl;
-    std::cout << "[nexus] passed " << tests_to_run.size() - fails << " of " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests") << " in "
-              << total_time_ms << " ms";
+    std::cout << "[nexus] passed " << tests_to_run.size() - fails << " of " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests")
+              << " in " << total_time_ms << " ms";
     if (fails > 0)
         std::cout << " (" << fails << " failed)";
     std::cout << std::endl;
@@ -180,7 +199,14 @@ int nx::Nexus::run()
             {
                 std::cerr << "[nexus] test [" << t->name().c_str() << "] failed (seed " << t->seed();
                 if (t->shouldReproduce())
-                    std::cerr << ", reproduce via TEST(..., reproduce(" << t->reproduction().seed << "))";
+                {
+                    std::cerr << ", reproduce via TEST(..., reproduce(";
+                    if (t->reproduction().trace.empty())
+                        std::cerr << t->reproduction().seed;
+                    else
+                        std::cerr << '"' << t->reproduction().trace.c_str() << '"';
+                    std::cerr << "))";
+                }
                 std::cerr << ")" << std::endl;
             }
         std::cerr << "[nexus] ERROR: " << failed_assertions << " ASSERTION" << (failed_assertions == 1 ? "" : "S") << " FAILED" << std::endl;

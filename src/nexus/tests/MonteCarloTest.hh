@@ -94,6 +94,7 @@ private:
     void tryExecuteMachineNormally(machine_trace& trace);
 
     void minimizeTrace(machine_trace& trace);
+    void reproduceTrace(cc::span<int const> serialized_trace);
 
     /// tries to replace a trace
     /// returns false if trace is invalid (e.g. violates a precondition)

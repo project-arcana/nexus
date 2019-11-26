@@ -1,10 +1,10 @@
 #include "MonteCarloTest.hh"
 
 #include <clean-core/array.hh>
-#include <clean-core/base64.hh>
 #include <clean-core/defer.hh>
 #include <clean-core/pair.hh>
 #include <clean-core/span.hh>
+#include <clean-core/vector.hh>
 
 #include <typed-geometry/feature/random.hh>
 #include <typed-geometry/functions/minmax.hh>
@@ -12,6 +12,7 @@
 
 #include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
+#include <nexus/detail/trace_serialize.hh>
 #include <nexus/minimize_options.hh>
 #include <nexus/test.hh>
 #include <nexus/tests/Test.hh>
@@ -440,6 +441,16 @@ void nx::MonteCarloTest::execute()
 
     CC_ASSERT(!test->shouldFail() && "should-fail tests not supported for MCT");
     CC_ASSERT(!test->isEndless() && "endless mode not YET supported for MCT");
+
+    // reproduce trace
+    if (test->shouldReproduce())
+    {
+        CC_ASSERT(!test->reproduction().trace.empty() && "MCT needs a string reproduce (trace)");
+        std::cerr << "[nexus] replaying MCT trace '" << test->reproduction().trace.c_str() << "'" << std::endl;
+        auto trace = nx::detail::trace_decode(test->reproduction().trace);
+        reproduceTrace(trace);
+        return;
+    }
 
     if (test->isDebug())
     {
@@ -1217,6 +1228,47 @@ int nx::MonteCarloTest::machine_trace::complexity() const
     return c;
 }
 
+void nx::MonteCarloTest::reproduceTrace(cc::span<int const> serialized_trace)
+{
+    machine_trace trace;
+    { // deserialize trace
+        auto pos = 0;
+        auto const get_int = [&] { return serialized_trace[pos++]; };
+
+        // equivalence and functions
+        auto eq_idx = get_int();
+        cc::vector<function*> funs;
+        if (eq_idx == -1)
+        {
+            for (auto& f : mFunctions)
+                funs.push_back(&f);
+        }
+        else
+        {
+            trace.equiv = &mEquivalences[eq_idx];
+
+            cc::vector<function*> funs_b;
+            machine::build_equivalence_checker(*this, *trace.equiv, funs, funs_b);
+        }
+
+        // rest of trace
+        while (pos < int(serialized_trace.size()))
+        {
+            auto& op = trace.ops.emplace_back();
+            op.function_idx = get_int();
+            op.fun = funs[op.function_idx];
+            op.return_value_idx = get_int();
+            auto arity = get_int();
+            CC_ASSERT(arity == op.fun->arity() && "invalid trace");
+            op.args_start_idx = int(trace.arg_indices.size());
+            for (auto ai = 0; ai < arity; ++ai)
+                trace.arg_indices.push_back(get_int());
+        }
+    }
+
+    replayTrace(trace, true);
+}
+
 cc::string nx::MonteCarloTest::machine_trace::serialize_to_string(MonteCarloTest const& test) const
 {
     cc::vector<int> trace;
@@ -1245,5 +1297,5 @@ cc::string nx::MonteCarloTest::machine_trace::serialize_to_string(MonteCarloTest
             trace.push_back(arg_indices[op.args_start_idx + ai]);
     }
 
-    return cc::base64_encode(cc::span(trace).as_bytes());
+    return nx::detail::trace_encode(trace);
 }

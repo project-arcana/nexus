@@ -9,6 +9,7 @@
 
 #include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
+#include <nexus/minimize_options.hh>
 #include <nexus/test.hh>
 #include <nexus/tests/Test.hh>
 
@@ -429,6 +430,7 @@ void nx::MonteCarloTest::execute()
     auto test = nx::detail::get_current_test();
 
     CC_ASSERT(!test->shouldFail() && "should-fail tests not supported for MCT");
+    CC_ASSERT(!test->isEndless() && "endless mode not YET supported for MCT");
 
     // prepare execution
     nx::detail::is_silenced() = true;
@@ -438,19 +440,18 @@ void nx::MonteCarloTest::execute()
     // first: try normal execution
     try
     {
-        if (test->isEndless())
-            while (true)
-                tryExecuteMachineNormally(trace);
-        else
-            tryExecuteMachineNormally(trace);
+        tryExecuteMachineNormally(trace);
     }
     catch (nx::detail::assertion_failed_exception const&)
     {
         // on fail: try to minimize trace
 
         std::cerr << "[nexus] MONTE_CARLO_TEST failed. Trying to generate minimal reproduction." << std::endl;
+        minimizeTrace(trace);
+        std::cerr << "[nexus] .. done. result:" << std::endl;
 
         nx::detail::is_silenced() = false;
+        nx::detail::always_terminate() = false;
         replayTrace(trace, true);
     }
 
@@ -701,6 +702,36 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
     }
 }
 
+void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
+{
+    auto found_smaller = true;
+
+    while (found_smaller) // TODO: time limit
+    {
+        std::cerr << "[nexus] .. trace size " << trace.complexity() << std::endl;
+        auto opts = trace.build_minimizer();
+
+        found_smaller = false;
+        while (!found_smaller && opts.has_options_left())
+        {
+            // build new trace
+            auto new_t = opts.get_next_option_for(trace);
+
+            try
+            {
+                // try new trace
+                replayTrace(new_t);
+            }
+            catch (nx::detail::assertion_failed_exception const&)
+            {
+                // found a smaller failing test
+                trace = new_t;
+                found_smaller = true;
+            }
+        }
+    }
+}
+
 bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode)
 {
     // pre callbacks
@@ -732,6 +763,9 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
 
         for (auto const& op : trace.ops)
         {
+            if (!op.enabled)
+                continue;
+
             auto f = &mFunctions[op.function_idx];
 
             if (print_mode)
@@ -762,16 +796,20 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
         // prepare machines
         cc::vector<function*> funs_a;
         cc::vector<function*> funs_b;
-        auto machines = machine::build_equivalence_checker(*this, e, funs_b, funs_b);
+        auto machines = machine::build_equivalence_checker(*this, e, funs_a, funs_b);
         auto& m_a = machines.first;
         auto& m_b = machines.second;
         REQUIRE(m_a.max_arity() == m_b.max_arity());
+        CC_ASSERT(funs_a.size() == funs_b.size());
 
         // execute
         auto args_buffer_a = cc::array<value*>::filled(m_a.max_arity(), nullptr);
         auto args_buffer_b = cc::array<value*>::filled(m_a.max_arity(), nullptr);
         for (auto const& op : trace.ops)
         {
+            if (!op.enabled)
+                continue;
+
             auto f_a = funs_a[op.function_idx];
             auto f_b = funs_a[op.function_idx];
 
@@ -865,4 +903,30 @@ void nx::MonteCarloTest::machine_trace::start(equivalence const* eq)
 
     arg_indices.clear();
     arg_indices.reserve(500);
+}
+
+nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::machine_trace::build_minimizer() const
+{
+    nx::minimize_options<nx::MonteCarloTest::machine_trace> min;
+
+    // try disabling functions without return types
+    for (size_t i = 0; i < ops.size(); ++i)
+        if (ops[i].enabled && ops[i].return_value_idx == -1)
+            min.options.emplace_back([i](machine_trace const& t) {
+                auto new_t = t;
+                new_t.ops[i].enabled = false;
+                return new_t;
+            });
+
+    return min;
+}
+
+int nx::MonteCarloTest::machine_trace::complexity() const
+{
+    auto opcnt = 0;
+    for (auto const& op : ops)
+        if (op.enabled)
+            ++opcnt;
+    // TODO: more measures
+    return opcnt;
 }

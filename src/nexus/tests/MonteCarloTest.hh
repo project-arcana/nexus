@@ -15,6 +15,7 @@
 
 #include <nexus/check.hh>
 #include <nexus/detail/signature.hh>
+#include <nexus/fwd.hh>
 
 #ifdef NX_HAS_REFLECTOR
 // TODO: this could be removed by some kind of manual to_string
@@ -91,6 +92,8 @@ public:
     // impls
 private:
     void tryExecuteMachineNormally(machine_trace& trace);
+
+    void minimizeTrace(machine_trace& trace);
 
     /// tries to replace a trace
     /// returns false if trace is invalid (e.g. violates a precondition)
@@ -307,6 +310,7 @@ private:
     {
         struct op
         {
+            bool enabled = true;
             int function_idx = -1;
             int args_start_idx = -1;
             int return_value_idx = -1;
@@ -316,7 +320,11 @@ private:
         cc::vector<op> ops;
         cc::vector<int> arg_indices;
 
+        int complexity() const;
+
         void start(equivalence const* eq);
+
+        minimize_options<machine_trace> build_minimizer() const;
     };
 
     struct type_metadata

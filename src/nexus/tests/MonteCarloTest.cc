@@ -1,6 +1,7 @@
 #include "MonteCarloTest.hh"
 
 #include <clean-core/array.hh>
+#include <clean-core/base64.hh>
 #include <clean-core/defer.hh>
 #include <clean-core/pair.hh>
 #include <clean-core/span.hh>
@@ -440,6 +441,12 @@ void nx::MonteCarloTest::execute()
     CC_ASSERT(!test->shouldFail() && "should-fail tests not supported for MCT");
     CC_ASSERT(!test->isEndless() && "endless mode not YET supported for MCT");
 
+    if (test->isDebug())
+    {
+        tryExecuteMachineNormally(trace);
+        return;
+    }
+
     // prepare execution
     nx::detail::is_silenced() = true;
     nx::detail::always_terminate() = true;
@@ -465,6 +472,8 @@ void nx::MonteCarloTest::execute()
         replayTrace(trace, true);
         std::cout.flush();
         std::cerr.flush();
+
+        test->setReproduce(reproduce(trace.serialize_to_string(*this)));
     }
 
     nx::detail::always_terminate() = false;
@@ -1206,4 +1215,35 @@ int nx::MonteCarloTest::machine_trace::complexity() const
     }
 
     return c;
+}
+
+cc::string nx::MonteCarloTest::machine_trace::serialize_to_string(MonteCarloTest const& test) const
+{
+    cc::vector<int> trace;
+
+    // equiv
+    if (!equiv)
+        trace.push_back(-1);
+    else
+    {
+        for (auto i = 0; i < int(test.mEquivalences.size()); ++i)
+            if (&test.mEquivalences[i] == equiv)
+            {
+                trace.push_back(i);
+                break;
+            }
+    }
+    CC_ASSERT(trace.size() == 1);
+
+    // serialize ops
+    for (auto const& op : ops)
+    {
+        trace.push_back(op.function_idx);
+        trace.push_back(op.return_value_idx);
+        trace.push_back(op.fun->arity());
+        for (auto ai = 0; ai < op.fun->arity(); ++ai)
+            trace.push_back(arg_indices[op.args_start_idx + ai]);
+    }
+
+    return cc::base64_encode(cc::span(trace).as_bytes());
 }

@@ -112,13 +112,18 @@ int nx::Nexus::run()
         // execute and measure
         auto const start_thread = std::this_thread::get_id();
         auto const start = std::chrono::high_resolution_clock::now();
-        try
-        {
+        if (t->isDebug())
             t->function()();
-        }
-        catch (nx::detail::assertion_failed_exception const&)
+        else
         {
-            // empty by design
+            try
+            {
+                t->function()();
+            }
+            catch (nx::detail::assertion_failed_exception const&)
+            {
+                // empty by design
+            }
         }
         auto const end = std::chrono::high_resolution_clock::now();
         auto const end_thread = std::this_thread::get_id();
@@ -194,7 +199,14 @@ int nx::Nexus::run()
             {
                 std::cerr << "[nexus] test [" << t->name().c_str() << "] failed (seed " << t->seed();
                 if (t->shouldReproduce())
-                    std::cerr << ", reproduce via TEST(..., reproduce(" << t->reproduction().seed << "))";
+                {
+                    std::cerr << ", reproduce via TEST(..., reproduce(";
+                    if (t->reproduction().trace.empty())
+                        std::cerr << t->reproduction().seed;
+                    else
+                        std::cerr << '"' << t->reproduction().trace.c_str() << '"';
+                    std::cerr << "))";
+                }
                 std::cerr << ")" << std::endl;
             }
         std::cerr << "[nexus] ERROR: " << failed_assertions << " ASSERTION" << (failed_assertions == 1 ? "" : "S") << " FAILED" << std::endl;

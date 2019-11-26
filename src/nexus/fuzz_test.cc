@@ -46,17 +46,22 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
         tg::rng rng;
         rng.seed(seed);
 
-        // TODO: check if this test failed and report the seed
-        try
-        {
+        // execute
+        if (test->isDebug())
             f(rng);
-        }
-        catch (assertion_failed_exception const&)
+        else
         {
-            std::cerr << "[nexus] fuzz test [" << test->name().c_str() << "] failed." << std::endl;
-            std::cerr << "        (reproduce via TEST(..., reproduce(" << seed << ")) " << std::endl;
-            test->setReproduce(reproduce(seed));
-            return;
+            try
+            {
+                f(rng);
+            }
+            catch (assertion_failed_exception const&)
+            {
+                std::cerr << "[nexus] fuzz test [" << test->name().c_str() << "] failed." << std::endl;
+                std::cerr << "        (reproduce via TEST(..., reproduce(" << seed << ")) " << std::endl;
+                test->setReproduce(reproduce(seed));
+                return;
+            }
         }
         ++it;
 

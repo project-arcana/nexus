@@ -32,6 +32,6 @@ void nx::detail::report_failed_check(nx::detail::check_result const& r, const ch
             std::cerr << "  in function " << function << std::endl;
     }
 
-    if (terminate || nx::detail::always_terminate())
+    if (terminate || nx::detail::always_terminate() || t->isDebug())
         throw assertion_failed_exception();
 }

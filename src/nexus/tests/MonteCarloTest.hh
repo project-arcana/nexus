@@ -325,6 +325,8 @@ private:
         void start(equivalence const* eq);
 
         minimize_options<machine_trace> build_minimizer() const;
+
+        cc::string serialize_to_string(MonteCarloTest const& test) const;
     };
 
     struct type_metadata

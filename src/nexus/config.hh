@@ -1,5 +1,7 @@
 #pragma once
 
+#include <clean-core/move.hh>
+#include <clean-core/string.hh>
 #include <clean-core/typedefs.hh>
 
 namespace nx
@@ -38,6 +40,11 @@ static constexpr struct disabled_t
 {
 } disabled;
 
+/// don't catch errors thrown (for debugging)
+static constexpr struct debug_t
+{
+} debug;
+
 /// use a specific seed
 struct seed
 {
@@ -48,13 +55,15 @@ struct seed
 /// used to reproduce a certain test
 /// example:
 ///     reproduce(0xDEADBEEF)
+///     reproduce("some trace")
 struct reproduce
 {
     explicit reproduce(size_t seed) : valid(true), seed(seed) {}
+    explicit reproduce(cc::string trace) : valid(true), trace(cc::move(trace)) {}
 
     bool valid = false;
     size_t seed = 0;
-    // TODO: trace
+    cc::string trace;
 
     static reproduce none() { return {}; }
 

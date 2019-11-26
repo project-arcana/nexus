@@ -763,9 +763,6 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
 
         for (auto const& op : trace.ops)
         {
-            if (!op.enabled)
-                continue;
-
             auto f = &mFunctions[op.function_idx];
 
             if (print_mode)
@@ -807,9 +804,6 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
         auto args_buffer_b = cc::array<value*>::filled(m_a.max_arity(), nullptr);
         for (auto const& op : trace.ops)
         {
-            if (!op.enabled)
-                continue;
-
             auto f_a = funs_a[op.function_idx];
             auto f_b = funs_a[op.function_idx];
 
@@ -911,10 +905,12 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
 
     // try disabling functions without return types
     for (size_t i = 0; i < ops.size(); ++i)
-        if (ops[i].enabled && ops[i].return_value_idx == -1)
+        if (ops[i].return_value_idx == -1)
             min.options.emplace_back([i](machine_trace const& t) {
                 auto new_t = t;
-                new_t.ops[i].enabled = false;
+                for (auto j = i + 1; j < new_t.ops.size(); ++j)
+                    new_t.ops[j - 1] = new_t.ops[j];
+                new_t.ops.pop_back();
                 return new_t;
             });
 
@@ -923,10 +919,11 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
 
 int nx::MonteCarloTest::machine_trace::complexity() const
 {
-    auto opcnt = 0;
+    auto c = 0;
     for (auto const& op : ops)
-        if (op.enabled)
-            ++opcnt;
-    // TODO: more measures
-    return opcnt;
+    {
+        c++;
+        (void)op; // TODO: more measures
+    }
+    return c;
 }

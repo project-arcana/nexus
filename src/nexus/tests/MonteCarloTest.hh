@@ -310,7 +310,6 @@ private:
     {
         struct op
         {
-            bool enabled = true;
             int function_idx = -1;
             int args_start_idx = -1;
             int return_value_idx = -1;

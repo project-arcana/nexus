@@ -461,7 +461,7 @@ void nx::MonteCarloTest::execute()
     // prepare execution
     nx::detail::is_silenced() = true;
     nx::detail::always_terminate() = true;
-    // DEBUG nx::detail::overwrite_assertion_handlers();
+    nx::detail::overwrite_assertion_handlers();
 
     // first: try normal execution
     try
@@ -471,10 +471,12 @@ void nx::MonteCarloTest::execute()
     catch (nx::detail::assertion_failed_exception const&)
     {
         // on fail: try to minimize trace
-
         std::cerr << "[nexus] MONTE_CARLO_TEST failed. Trying to generate minimal reproduction." << std::endl;
         minimizeTrace(trace);
         std::cerr << "[nexus] .. done. result:" << std::endl;
+
+        // set reproduction BEFORE actually executing it
+        test->setReproduce(reproduce(trace.serialize_to_string(*this)));
 
         nx::detail::is_silenced() = false;
         nx::detail::always_terminate() = false;
@@ -483,8 +485,6 @@ void nx::MonteCarloTest::execute()
         replayTrace(trace, true);
         std::cout.flush();
         std::cerr.flush();
-
-        test->setReproduce(reproduce(trace.serialize_to_string(*this)));
     }
 
     nx::detail::always_terminate() = false;
@@ -1122,7 +1122,10 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
         }
     }
 
+    auto can_disable_fun = cc::array<bool>::defaulted(ops.size());
+
     // try disabling functions
+    auto disable_cnt = 0;
     for (int i = 0; i < int(ops.size()); ++i)
     {
         auto const& op = ops[i];
@@ -1144,7 +1147,31 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
                 can_disable = true;
         }
 
+        can_disable_fun[i] = can_disable;
         if (can_disable)
+            ++disable_cnt;
+    }
+
+    // exponential disable
+    if (disable_cnt > 10)
+    {
+        auto seed = get_seed() + complexity();
+        min.options.emplace_back([can_disable_fun, seed](machine_trace const& old_t) {
+            tg::rng rng;
+            rng.seed(seed);
+            auto t = old_t;
+            t.ops.clear();
+            for (auto i = 0; i < int(old_t.ops.size()); ++i)
+                if (!can_disable_fun[i] || tg::uniform<bool>(rng))
+                    t.ops.push_back(old_t.ops[i]);
+            t.ops.pop_back();
+            return t;
+        });
+    }
+
+    // disable single functions
+    for (int i = 0; i < int(ops.size()); ++i)
+        if (can_disable_fun[i])
             min.options.emplace_back([i](machine_trace const& old_t) {
                 auto t = old_t;
                 for (auto j = i + 1; j < int(t.ops.size()); ++j)
@@ -1152,7 +1179,6 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
                 t.ops.pop_back();
                 return t;
             });
-    }
 
     // try to rename complete vars
     for (auto const& kvp : varsets)

@@ -45,6 +45,12 @@ static constexpr struct debug_t
 {
 } debug;
 
+/// verbose test execution (for debugging)
+/// (especially useful for debugging endless loops in a MCT)
+static constexpr struct verbose_t
+{
+} verbose;
+
 /// use a specific seed
 struct seed
 {

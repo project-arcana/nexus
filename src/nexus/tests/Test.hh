@@ -32,6 +32,7 @@ public:
     reproduce reproduction() const { return mReproduction; }
     bool isEnabled() const { return mIsEnabled; }
     bool isDebug() const { return mIsDebug; }
+    bool isVerbose() const { return mIsVerbose; }
 
     // methods
 public:
@@ -40,6 +41,7 @@ public:
     void setEndless() { mIsEndless = true; }
     void setDisabled() { mIsEnabled = false; }
     void setDebug() { mIsDebug = true; }
+    void setVerbose() { mIsVerbose = true; }
     void setReproduce(reproduce r) { mReproduction = r; }
     void addAfterPattern(cc::string pattern) { mAfterPatterns.push_back(cc::move(pattern)); }
     void addBeforePattern(cc::string pattern) { mBeforePatterns.push_back(cc::move(pattern)); }
@@ -77,6 +79,7 @@ private:
     bool mIsEndless = false;
     bool mIsEnabled = true;
     bool mIsDebug = false;
+    bool mIsVerbose = false;
 
     reproduce mReproduction = reproduce::none();
 

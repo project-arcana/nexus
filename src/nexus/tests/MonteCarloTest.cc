@@ -493,20 +493,29 @@ void nx::MonteCarloTest::execute()
 
 void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
 {
+    auto verbose = detail::get_current_test()->isVerbose();
+
     // pre callbacks
+    if (verbose)
+        std::cout << " .. executing pre-callbacks (" << mPreCallbacks.size() << ")" << std::endl;
     for (auto& f : mPreCallbacks)
         f();
 
     // post callbacks
     CC_DEFER
     {
+        if (verbose)
+            std::cout << " .. executing post-callbacks (" << mPreCallbacks.size() << ")" << std::endl;
         for (auto& f : mPostCallbacks)
             f();
     };
 
     // helper
-    auto const add_trace = [&trace](function* f, int vi, cc::span<int> arg_indices) {
+    auto const add_trace = [&trace, verbose](function* f, int vi, cc::span<int> arg_indices) {
         CC_ASSERT(f->arity() == int(arg_indices.size()));
+
+        if (verbose)
+            std::cout << " .. execute [" << f->name.c_str() << "]" << std::endl;
 
         machine_trace::op op;
         op.function_idx = f->internal_idx;

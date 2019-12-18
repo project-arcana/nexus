@@ -60,6 +60,10 @@ int nx::Nexus::run()
     for (auto const& t : tests)
     {
         auto do_run = true;
+
+        if (!t->isEnabled())
+            do_run = false;
+
         if (!mSpecificTests.empty())
         {
             do_run = false;
@@ -67,8 +71,6 @@ int nx::Nexus::run()
                 if (s == t->name())
                     do_run = true;
         }
-        if (!t->isEnabled())
-            do_run = false;
 
         if (!do_run)
         {

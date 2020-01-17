@@ -9,12 +9,16 @@
 #include <polymesh/assert.hh>
 #endif
 
+#include <nexus/check.hh>
 #include <nexus/detail/exception.hh>
 #include <nexus/tests/Test.hh>
 
 void nx::detail::overwrite_assertion_handlers()
 {
     auto handler = [](auto const& info) {
+        nx::detail::number_of_assertions()++;
+        nx::detail::number_of_failed_assertions()++;
+
         if (!nx::detail::is_silenced())
         {
             fflush(stdout);

@@ -45,3 +45,5 @@ void detail::configure(Test* t, const reproduce& r) { t->setReproduce(r); }
 void detail::configure(Test* t, const disabled_t&) { t->setDisabled(); }
 
 void detail::configure(Test* t, const debug_t&) { t->setDebug(); }
+
+void detail::configure(Test* t, const verbose_t&) { t->setVerbose(); }

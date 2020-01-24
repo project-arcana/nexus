@@ -19,6 +19,9 @@ struct tg_comp_abs_approx
 
     T const& value() const { return _value; }
 
+    ScalarT get_abs() const { return _eps_abs; }
+    ScalarT get_rel() const { return _eps_rel; }
+
     tg_comp_abs_approx abs(ScalarT const& e) const
     {
         auto a = *this;
@@ -36,7 +39,7 @@ struct tg_comp_abs_approx
     bool operator==(T const& rhs) const
     {
         for (auto i = 0; i < D; ++i)
-            if (abs_approx<ScalarT>(_value[i]) != rhs[i])
+            if (abs_approx<ScalarT>(_value[i]).abs(_eps_abs).rel(_eps_rel) != rhs[i])
                 return false;
         return true;
     }
@@ -54,6 +57,9 @@ struct tg_mat_abs_approx
     tg_mat_abs_approx(T const& v) : _value(v) {}
 
     T const& value() const { return _value; }
+
+    ScalarT get_abs() const { return _eps_abs; }
+    ScalarT get_rel() const { return _eps_rel; }
 
     tg_mat_abs_approx abs(ScalarT const& e) const
     {
@@ -73,7 +79,7 @@ struct tg_mat_abs_approx
     {
         for (auto x = 0; x < C; ++x)
             for (auto y = 0; y < C; ++y)
-                if (abs_approx<ScalarT>(_value[x][y]) != rhs[x][y])
+                if (abs_approx<ScalarT>(_value[x][y]).abs(_eps_abs).rel(_eps_rel) != rhs[x][y])
                     return false;
         return true;
     }
@@ -117,7 +123,16 @@ cc::string to_string(tg_comp_abs_approx<T, D, ScalarT> const& v)
             s += ", ";
         s += nx::detail::make_string_repr(v.value()[i]);
     }
-    return s + ")";
+    s += ")";
+    if (v.get_abs() != default_abs_epsilon<ScalarT>::value || v.get_rel() != default_rel_epsilon<ScalarT>::value)
+    {
+        s += " (abs: ";
+        s += nx::detail::make_string_repr(v.get_abs());
+        s += ", rel: ";
+        s += nx::detail::make_string_repr(v.get_rel());
+        s += ")";
+    }
+    return s;
 }
 
 template <class T, int C, int R, class ScalarT>
@@ -137,7 +152,16 @@ cc::string to_string(tg_mat_abs_approx<T, C, R, ScalarT> const& v)
         }
         s += ")";
     }
-    return s + "]";
+    s += "]";
+    if (v.get_abs() != default_abs_epsilon<ScalarT>::value || v.get_rel() != default_rel_epsilon<ScalarT>::value)
+    {
+        s += " (abs: ";
+        s += nx::detail::make_string_repr(v.get_abs());
+        s += ", rel: ";
+        s += nx::detail::make_string_repr(v.get_rel());
+        s += ")";
+    }
+    return s;
 }
 }
 

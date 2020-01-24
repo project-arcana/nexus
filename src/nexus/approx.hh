@@ -46,6 +46,9 @@ struct abs_approx
         return a;
     }
 
+    T get_abs() const { return _eps_abs; }
+    T get_rel() const { return _eps_rel; }
+
     template <class U>
     bool operator==(U const& rhs) const
     {
@@ -58,7 +61,7 @@ struct abs_approx
             if (diff <= _eps_abs)
                 return true;
 
-            auto div = rhs / _value - 1;
+            auto div = (rhs > 0 ? rhs / _value : _value / rhs) - 1;
 
             if (div >= 0 && div <= _eps_rel)
                 return true;
@@ -70,7 +73,7 @@ struct abs_approx
             if (diff <= _eps_abs)
                 return true;
 
-            auto div = _value / rhs - 1;
+            auto div = (rhs < 0 ? rhs / _value : _value / rhs) - 1;
 
             if (div >= 0 && div <= _eps_rel)
                 return true;
@@ -104,7 +107,16 @@ bool operator!=(U const& lhs, abs_approx<T> const& rhs)
 template <class T>
 cc::string to_string(abs_approx<T> const& v)
 {
-    return "approx " + nx::detail::make_string_repr(v.value());
+    auto s = "approx " + nx::detail::make_string_repr(v.value());
+    if (v.get_abs() != default_abs_epsilon<T>::value || v.get_rel() != default_rel_epsilon<T>::value)
+    {
+        s += " (abs: ";
+        s += nx::detail::make_string_repr(v.get_abs());
+        s += ", rel: ";
+        s += nx::detail::make_string_repr(v.get_rel());
+        s += ")";
+    }
+    return s;
 }
 }
 

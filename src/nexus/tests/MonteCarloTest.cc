@@ -107,6 +107,9 @@ struct nx::MonteCarloTest::machine
             {
                 if (!eq_funs_by_type.at(tb).count(name))
                 {
+                    if (fa->is_optional)
+                        continue; // not strictly required
+
                     std::cerr << "operation '" << name << "' not found for type " << tb.name() << std::endl;
                     std::cerr << "(note: an exact match is required, subtyping may interfere with this)" << std::endl;
                 }

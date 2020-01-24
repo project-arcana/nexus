@@ -265,6 +265,12 @@ private:
                                         detail::make_signature(cc::forward<F>(f))));
         }
 
+        function& make_optional()
+        {
+            is_optional = true;
+            return *this;
+        }
+
     private:
         template <class F, class R, class... Args>
         void set_precondition(F&& f, detail::signature<R(Args...)>)
@@ -294,6 +300,7 @@ private:
         int min_executions = 100;
         int executions = 0;
         int internal_idx = -1;
+        bool is_optional = false;
 
         friend class MonteCarloTest;
     };

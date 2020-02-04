@@ -13,8 +13,8 @@ option(NEXUS_ENABLE_UNITY_BUILD "If enabled, compiles this library as a single c
 # =========================================
 # define library
 
-file(GLOB_RECURSE SOURCES "src/*.cc" "src/*.c")
-file(GLOB_RECURSE HEADERS "src/*.hh" "src/*.h")
+file(GLOB_RECURSE SOURCES "src/*.cc")
+file(GLOB_RECURSE HEADERS "src/*.hh" "src/*.inl")
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" FILES ${SOURCES} ${HEADERS})
 

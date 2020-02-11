@@ -3,7 +3,7 @@
 #include <cstdio> // TODO: replace with log
 
 #include <clean-core/assert.hh>
-#include <typed-geometry/common/assert.hh>
+#include <typed-geometry/feature/assert.hh>
 
 #ifdef NX_HAS_POLYMESH
 #include <polymesh/assert.hh>

@@ -7,7 +7,7 @@
 #include <clean-core/vector.hh>
 
 #include <typed-geometry/feature/random.hh>
-#include <typed-geometry/functions/minmax.hh>
+#include <typed-geometry/functions/basic/minmax.hh>
 #include <typed-geometry/tg-lean.hh>
 
 #include <nexus/detail/assertions.hh>

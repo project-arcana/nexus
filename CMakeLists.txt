@@ -26,8 +26,7 @@ endmacro()
 file(GLOB_RECURSE SOURCES "src/*.cc")
 file(GLOB_RECURSE HEADERS "src/*.hh" "src/*.inl")
 
-arcana_source_group(SOURCES)
-arcana_source_group(HEADERS)
+arcana_source_group(SOURCES HEADERS)
 
 if (NEXUS_ENABLE_UNITY_BUILD)
     arcana_enable_unity_build(nexus SOURCES 100 cc)

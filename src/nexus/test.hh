@@ -8,9 +8,7 @@
 
 #ifndef NX_FORCE_MACRO_PREFIX
 
-#define APP(...) NX_APP(__VA_ARGS__)
 #define TEST(...) NX_TEST(__VA_ARGS__)
-#define BENCHMARK(...) NX_BENCHMARK(__VA_ARGS__)
 
 #endif
 

@@ -119,6 +119,8 @@ APP("myapp")
 
     auto b = args.has("b");
 
+    auto posargs = args.positional_args();
+
     .. do something
 }
 ```

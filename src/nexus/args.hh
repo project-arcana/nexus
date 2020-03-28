@@ -93,6 +93,8 @@ public:
         return def;
     }
 
+    cc::vector<cc::string> positional_args() const;
+
 private:
     struct arg
     {

@@ -162,6 +162,7 @@ bool args::parse(int argc, char const* const* argv)
         {
             valarg->value = s;
             valarg = nullptr;
+            continue;
         }
 
         if (s == "--") // rest is positional
@@ -282,6 +283,15 @@ int args::idx_of(cc::string_view name) const
     }
 
     return -1;
+}
+
+cc::vector<cc::string> args::positional_args() const
+{
+    cc::vector<cc::string> r;
+    for (auto const& a : _parsed_pos_args)
+        for (auto const& v : a.values)
+            r.push_back(v);
+    return r;
 }
 
 args::arg& args::add_arg(std::initializer_list<cc::string> names, cc::string desc)

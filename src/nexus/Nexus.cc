@@ -1,5 +1,6 @@
 #include "Nexus.hh"
 
+#include <nexus/apps/App.hh>
 #include <nexus/check.hh>
 #include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
@@ -19,13 +20,21 @@
 
 namespace
 {
+nx::App*& curr_app()
+{
+    thread_local static nx::App* a = nullptr;
+    return a;
+}
 nx::Test*& curr_test()
 {
     thread_local static nx::Test* t = nullptr;
     return t;
 }
 }
+
+nx::App* nx::detail::get_current_app() { return curr_app(); }
 nx::Test* nx::detail::get_current_test() { return curr_test(); }
+
 bool& nx::detail::is_silenced()
 {
     thread_local static bool silenced = false;
@@ -39,9 +48,16 @@ bool& nx::detail::always_terminate()
 
 void nx::Nexus::applyCmdArgs(int argc, char** argv)
 {
+    mTestArgC = argc - 1;
+    mTestArgV = argv + 1;
+
     for (auto i = 1; i < argc; ++i)
     {
         auto s = cc::string_view(argv[i]);
+
+        if (i == 1 && (s == "--help" || s == "-h"))
+            mPrintHelp = true;
+
         if (s.empty() || s[0] == '-')
             continue; //  TODO
 
@@ -51,6 +67,54 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
 
 int nx::Nexus::run()
 {
+    auto constexpr version = "0.0.1";
+
+    if (mPrintHelp)
+    {
+        std::cout << "[nexus] version " << version << std::endl;
+        std::cout << "NOTE: nexus is still early in development." << std::endl;
+        std::cout << std::endl;
+        std::cout << "usage:" << std::endl;
+        std::cout << R"(  --help        shows this help)" << std::endl;
+        std::cout << R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))" << std::endl;
+        std::cout << std::endl;
+        std::cout << "stats:" << std::endl;
+        std::cout << "  - found " << detail::get_all_tests().size() << " tests" << std::endl;
+        std::cout << "  - found " << detail::get_all_apps().size() << " apps" << std::endl;
+        std::cout << std::endl;
+        return EXIT_SUCCESS;
+    }
+
+    // apps
+    cc::vector<App*> apps_to_run;
+    for (auto const& app : detail::get_all_apps())
+    {
+        auto do_run = false;
+
+        if (!mSpecificTests.empty())
+        {
+            for (auto const& s : mSpecificTests)
+                if (s == app->name())
+                    do_run = true;
+        }
+
+        if (do_run)
+            apps_to_run.push_back(app.get());
+    }
+    if (!apps_to_run.empty())
+    {
+        for (auto const& a : apps_to_run)
+        {
+            a->mArgC = mTestArgC - 1;
+            a->mArgV = mTestArgV + 1;
+            curr_app() = a;
+            a->function()(); // execute app
+            curr_app() = nullptr;
+        }
+        return EXIT_SUCCESS;
+    }
+
+    // tests
     auto const& tests = detail::get_all_tests();
 
     auto seed = cc::make_hash(std::chrono::high_resolution_clock::now().time_since_epoch().count());
@@ -84,7 +148,7 @@ int nx::Nexus::run()
         tests_to_run.push_back(t.get());
     }
 
-    std::cout << "[nexus] nexus version 0.0.1" << std::endl;
+    std::cout << "[nexus] version " << version << std::endl;
     std::cout << "[nexus] run with '--help' for options" << std::endl;
     std::cout << "[nexus] detected " << tests.size() << (tests.size() == 1 ? " test" : " tests") << std::endl;
     std::cout << "[nexus] running " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests");
@@ -162,7 +226,7 @@ int nx::Nexus::run()
 
         std::stringstream ss_name, ss_asserts, ss_time;
         ss_name << "  [" << t->name().c_str() << "]";
-        ss_asserts << " ... " << t->mAssertions << " assertions";
+        ss_asserts << " ... " << t->mAssertions << " checks";
         ss_time << " in " << test_time_ms << " ms";
         auto s_name = ss_name.str();
         auto s_asserts = ss_asserts.str();

@@ -13,9 +13,11 @@ template <class T>
 cc::string make_string_repr(T const& v)
 {
     cc::string s;
-    // TODO: some basic to_string in case reflector is not available
+    if constexpr (std::is_constructible_v<cc::string, T const&>)
+        s = '"' + cc::string(v) + '"';
 #ifdef NX_HAS_REFLECTOR
-    if constexpr (rf::has_to_string<T>)
+    // TODO: some basic to_string in case reflector is not available
+    else if constexpr (rf::has_to_string<T>)
         s = rf::to_string(v);
     else
 #endif

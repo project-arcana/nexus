@@ -5,6 +5,15 @@
 #include <clean-core/forward.hh>
 #include <clean-core/macros.hh>
 
+
+#if defined(_MSC_VER) && _MSC_VER < 1925
+// some overloads in this file cause compilation errors in old MSVC versions, which were fixed in VS 16.5 and up
+// https://developercommunity.visualstudio.com/content/problem/829824/ambiguous-overload-for-function-pointer-argument-i.html
+#define NX_MSVC_WORKAROUND_829824 1
+#else
+#define NX_MSVC_WORKAROUND_829824 0
+#endif
+
 namespace nx::detail
 {
 template <class T>
@@ -59,7 +68,7 @@ signature<R(T const&, Args...)> make_signature(R (T::*)(Args...) const)
     return {};
 }
 
-#ifndef CC_COMPILER_MSVC
+#if NX_MSVC_WORKAROUND_829824 == 0
 template <class R, class... Args>
 signature<R(Args...)> make_signature(R (*)(Args...) noexcept)
 {
@@ -102,7 +111,7 @@ auto make_function(R (T::*f)(Args...) const)
     return [f](T const& v, Args... args) -> R { return (v.*f)(cc::forward<Args>(args)...); };
 }
 
-#ifndef CC_COMPILER_MSVC
+#if NX_MSVC_WORKAROUND_829824 == 0
 template <class T, class R, class... Args>
 auto make_function(R (T::*f)(Args...) noexcept)
 {
@@ -129,3 +138,5 @@ auto compose(F&& f, Op&& op, signature<R(Args...)>)
     return [f = cc::forward<F>(f), op = cc::forward<Op>(op)](Args... args) { return op(f(cc::forward<Args>(args)...)); };
 }
 }
+
+#undef NX_MSVC_WORKAROUND_829824

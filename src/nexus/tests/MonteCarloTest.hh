@@ -4,11 +4,10 @@
 #include <typeinfo>
 #include <utility>
 
-#include <map> // TODO: replace with cc!
-
 #include <clean-core/capped_vector.hh>
 #include <clean-core/has_operator.hh>
 #include <clean-core/span.hh>
+#include <clean-core/map.hh>
 #include <clean-core/string.hh>
 #include <clean-core/unique_function.hh>
 #include <clean-core/vector.hh>
@@ -372,7 +371,7 @@ private:
 
     // members
 private:
-    std::map<std::type_index, type_metadata> mTypeMetadata;
+    cc::map<std::type_index, type_metadata> mTypeMetadata;
     cc::vector<function> mFunctions;
     cc::vector<cc::unique_function<void()>> mPreCallbacks;
     cc::vector<cc::unique_function<void()>> mPostCallbacks;

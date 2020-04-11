@@ -22,6 +22,11 @@
 
 // ================= Implementation =================
 
+// I am very sorry to enable this "globally" but I see no way to make it only work within the check macro.
+#ifdef CC_COMPILER_GCC
+#pragma GCC diagnostic ignored "-Wparentheses"
+#endif
+
 #define NX_IMPL_CHECK(terminate, ...)                                                                                   \
     do                                                                                                                  \
     {                                                                                                                   \

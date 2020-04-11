@@ -6,8 +6,8 @@
 
 #include <clean-core/capped_vector.hh>
 #include <clean-core/has_operator.hh>
-#include <clean-core/span.hh>
 #include <clean-core/map.hh>
+#include <clean-core/span.hh>
 #include <clean-core/string.hh>
 #include <clean-core/unique_function.hh>
 #include <clean-core/vector.hh>

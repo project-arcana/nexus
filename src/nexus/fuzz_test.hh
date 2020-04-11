@@ -23,7 +23,7 @@
 #define NX_FUZZ_TEST(...) NX_DETAIL_REGISTER_FUZZ_TEST(CC_MACRO_JOIN(_nx_anon_fuzz_test_function_, __COUNTER__), __VA_ARGS__)
 
 #define NX_DETAIL_REGISTER_FUZZ_TEST(fuzz_fun, ...)                     \
-    static void fuzz_fun(tg::rng&);                                            \
+    static void fuzz_fun(tg::rng&);                                     \
     NX_TEST(__VA_ARGS__) { ::nx::detail::execute_fuzz_test(fuzz_fun); } \
     void fuzz_fun
 

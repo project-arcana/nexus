@@ -219,49 +219,56 @@ private:
         template <class F>
         function& when_not(F&& f)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [](auto&& v) { return !v; }, detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [](auto&& v) { return !v; }, detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_equal(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v == value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v == value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_not_equal(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v != value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v != value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_greater_than(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v > value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v > value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_greater_or_equal(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v >= value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v >= value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_less_than(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v < value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v < value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_less_or_equal(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v <= value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v <= value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         function& make_optional()

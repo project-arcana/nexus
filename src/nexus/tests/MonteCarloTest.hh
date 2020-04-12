@@ -4,10 +4,9 @@
 #include <typeinfo>
 #include <utility>
 
-#include <map> // TODO: replace with cc!
-
 #include <clean-core/capped_vector.hh>
 #include <clean-core/has_operator.hh>
+#include <clean-core/map.hh>
 #include <clean-core/span.hh>
 #include <clean-core/string.hh>
 #include <clean-core/unique_function.hh>
@@ -220,49 +219,56 @@ private:
         template <class F>
         function& when_not(F&& f)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [](auto&& v) { return !v; }, detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [](auto&& v) { return !v; }, detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_equal(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v == value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v == value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_not_equal(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v != value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v != value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_greater_than(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v > value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v > value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_greater_or_equal(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v >= value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v >= value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_less_than(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v < value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v < value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         template <class F, class V>
         function& when_less_or_equal(F&& f, V&& value)
         {
-            return when(detail::compose(detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v <= value; },
-                                        detail::make_signature(cc::forward<F>(f))));
+            return when(detail::compose(
+                detail::make_function(cc::forward<F>(f)), [value = cc::forward<V>(value)](auto&& v) { return v <= value; },
+                detail::make_signature(cc::forward<F>(f))));
         }
 
         function& make_optional()
@@ -372,7 +378,7 @@ private:
 
     // members
 private:
-    std::map<std::type_index, type_metadata> mTypeMetadata;
+    cc::map<std::type_index, type_metadata> mTypeMetadata;
     cc::vector<function> mFunctions;
     cc::vector<cc::unique_function<void()>> mPreCallbacks;
     cc::vector<cc::unique_function<void()>> mPostCallbacks;

@@ -74,7 +74,7 @@ void configure(Test* t, verbose_t const&);
 template <class... Args>
 void build_test(char const* file, int line, char const* fun_name, test_fun_t fun, char const* name, Args&&... args)
 {
-    auto t = register_test(name, file, line, fun_name, fun);
+    [[maybe_unused]] auto t = register_test(name, file, line, fun_name, fun);
     ((configure(t, args)), ...);
 }
 }

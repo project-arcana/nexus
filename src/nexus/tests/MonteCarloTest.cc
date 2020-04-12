@@ -658,8 +658,8 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
                     CC_ASSERT(va.type == vb.type && "type mismatch");
                     if (!va.is_void())
                     {
-                        CC_ASSERT(mTypeMetadata.count(va.type));
-                        if (auto const& test_eq = mTypeMetadata.at(va.type).check_equality)
+                        CC_ASSERT(mTypeMetadata.contains_key(va.type));
+                        if (auto const& test_eq = mTypeMetadata.get(va.type).check_equality)
                             test_eq(va, vb);
                     }
                 }
@@ -675,8 +675,8 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
                         else
                         {
                             CC_ASSERT(f_a->arg_types[i] == f_b->arg_types[i] && "type mismatch");
-                            CC_ASSERT(mTypeMetadata.count(f_a->arg_types[i]));
-                            if (auto const& test_eq = mTypeMetadata.at(f_a->arg_types[i]).check_equality)
+                            CC_ASSERT(mTypeMetadata.contains_key(f_a->arg_types[i]));
+                            if (auto const& test_eq = mTypeMetadata.get(f_a->arg_types[i]).check_equality)
                                 test_eq(*args_a[i], *args_b[i]);
                         }
                     }
@@ -814,9 +814,9 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     };
     auto const value_to_string = [this](value const& v) -> cc::string {
         CC_ASSERT(!v.is_void());
-        if (!mTypeMetadata.count(v.type))
+        if (!mTypeMetadata.contains_key(v.type))
             return "???";
-        auto const& f = mTypeMetadata.at(v.type).to_string;
+        auto const& f = mTypeMetadata.get(v.type).to_string;
         if (!f)
             return "???";
         return f(v.ptr);
@@ -1010,8 +1010,8 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                 CC_ASSERT(va.type == vb.type && "type mismatch");
                 if (!va.is_void())
                 {
-                    CC_ASSERT(mTypeMetadata.count(va.type));
-                    if (auto const& test_eq = mTypeMetadata.at(va.type).check_equality)
+                    CC_ASSERT(mTypeMetadata.contains_key(va.type));
+                    if (auto const& test_eq = mTypeMetadata.get(va.type).check_equality)
                         test_eq(va, vb);
                 }
             }
@@ -1027,8 +1027,8 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                     else
                     {
                         CC_ASSERT(f_a->arg_types[i] == f_b->arg_types[i] && "type mismatch");
-                        CC_ASSERT(mTypeMetadata.count(f_a->arg_types[i]));
-                        if (auto const& test_eq = mTypeMetadata.at(f_a->arg_types[i]).check_equality)
+                        CC_ASSERT(mTypeMetadata.contains_key(f_a->arg_types[i]));
+                        if (auto const& test_eq = mTypeMetadata.get(f_a->arg_types[i]).check_equality)
                             test_eq(*args_a[i], *args_b[i]);
                     }
                 }

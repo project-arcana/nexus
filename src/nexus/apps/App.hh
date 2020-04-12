@@ -18,8 +18,8 @@ public:
     int line() const { return mLine; }
     cc::string const& functionName() const { return mFunctionName; }
     app_fun_t function() const { return mFunction; }
-    int argc() const{return mArgC;}
-    char** argv() const{return mArgV;}
+    int argc() const { return mArgC; }
+    char** argv() const { return mArgV; }
 
     // ctor
 public:

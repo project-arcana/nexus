@@ -120,6 +120,7 @@ int nx::Nexus::run()
     auto seed = cc::make_hash(std::chrono::high_resolution_clock::now().time_since_epoch().count());
 
     cc::vector<Test*> tests_to_run;
+    cc::vector<Test*> empty_tests;
     auto disabled_tests = 0;
     for (auto const& t : tests)
     {
@@ -214,6 +215,8 @@ int nx::Nexus::run()
             failed_assertions += t->mFailedAssertions;
         }
         assertions += t->mAssertions;
+        if (t->mAssertions == 0)
+            empty_tests.push_back(t);
 
         // reset
         nx::detail::is_silenced() = false;
@@ -285,6 +288,15 @@ int nx::Nexus::run()
     else
     {
         std::cout << "[nexus] success." << std::endl;
+        if (!empty_tests.empty())
+        {
+            std::cerr << "[nexus] WARNING: " << empty_tests.size() << " test(s) have no assertions." << std::endl;
+            std::cerr << "[nexus]   (this can indicate a bug and can be silenced with \"CHECK(true);\")" << std::endl;
+            std::cerr << "[nexus]   affected tests:" << std::endl;
+            for (auto t : empty_tests)
+                std::cerr << "[nexus]   - [" << t->name().c_str() << "]" << std::endl;
+        }
+
         return EXIT_SUCCESS;
     }
 }

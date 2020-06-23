@@ -67,7 +67,7 @@ public:
 public:
     bool parse(); ///< takes app args
     bool parse(int argc, char const* const* argv);
-    void print_help();
+    void print_help() const;
 
     // retrieval
 public:

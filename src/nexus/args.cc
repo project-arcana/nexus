@@ -340,7 +340,7 @@ args::pos_arg& args::add_pos_arg(char n, cc::string desc)
     return a;
 }
 
-void args::print_help()
+void args::print_help() const
 {
     if (!_app_name.empty())
         std::cout << _app_name.c_str() << std::endl;

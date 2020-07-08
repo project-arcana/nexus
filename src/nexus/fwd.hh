@@ -10,4 +10,5 @@ class App;
 
 template <class T>
 struct minimize_options;
+struct args;
 }

@@ -227,7 +227,6 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-#if 0
         std::stringstream ss_name, ss_asserts, ss_time;
         ss_name << "  [" << t->name().c_str() << "]";
         ss_asserts << " ... " << t->mAssertions << " checks";
@@ -241,11 +240,9 @@ int nx::Nexus::run()
             s_name.push_back(' ');
         while (s_asserts.size() < 23)
             s_asserts = ' ' + s_asserts;
-         std::cout << s_name << s_asserts << s_time << std::endl;
-#else
-        // faster, but looks slightly different
-        printf("  %-60s ... %6d checks in %.4f ms\n", t->name().c_str(), t->mAssertions, test_time_ms);
-#endif
+
+        std::cout << s_name << s_asserts << s_time << std::endl;
+
         if (start_thread != end_thread)
             std::cerr << " (WARNING: changed OS thread, from " << start_thread << " to " << end_thread << ")" << std::endl;
     }
@@ -264,8 +261,8 @@ int nx::Nexus::run()
     std::cout << std::endl;
     if (tests.empty())
     {
-        std::cerr << "[nexus] WARNING: no tests found/selected" << std::endl;
-        return EXIT_SUCCESS;
+        std::cerr << "[nexus] ERROR: no tests found/selected" << std::endl;
+        return EXIT_FAILURE;
     }
     else if (fails > 0)
     {

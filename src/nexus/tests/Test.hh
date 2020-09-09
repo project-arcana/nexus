@@ -21,6 +21,9 @@ public:
     int line() const { return mLine; }
     cc::string const& functionName() const { return mFunctionName; }
     test_fun_t function() const { return mFunction; }
+    int argc() const { return mArgC; }
+    char const* const* argv() const { return mArgV; }
+    cc::span<char const* const> arg_span() const { return {mArgV, size_t(mArgC)}; }
     size_t seed() const { return mSeed; }
     bool isExclusive() const { return mIsExclusive; }
     bool hasFailed() const { return mFailedAssertions > 0; }
@@ -80,6 +83,9 @@ private:
     bool mIsEnabled = true;
     bool mIsDebug = false;
     bool mIsVerbose = false;
+
+    int mArgC = 0;
+    char const* const* mArgV = nullptr;
 
     reproduce mReproduction = reproduce::none();
 

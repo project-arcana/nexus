@@ -124,6 +124,8 @@ int nx::Nexus::run()
     auto disabled_tests = 0;
     for (auto const& t : tests)
     {
+        t->mArgC = mTestArgC - 1;
+        t->mArgV = mTestArgV + 1;
         auto do_run = true;
 
         if (!t->isEnabled())
@@ -227,25 +229,7 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-#if 0
-        std::stringstream ss_name, ss_asserts, ss_time;
-        ss_name << "  [" << t->name().c_str() << "]";
-        ss_asserts << " ... " << t->mAssertions << " checks";
-        ss_time << " in " << test_time_ms << " ms";
-        auto s_name = ss_name.str();
-        auto s_asserts = ss_asserts.str();
-        auto s_time = ss_time.str();
-
-        // TODO: faster
-        while (s_name.size() < 40)
-            s_name.push_back(' ');
-        while (s_asserts.size() < 23)
-            s_asserts = ' ' + s_asserts;
-         std::cout << s_name << s_asserts << s_time << std::endl;
-#else
-        // faster, but looks slightly different
         printf("  %-60s ... %6d checks in %.4f ms\n", t->name().c_str(), t->mAssertions, test_time_ms);
-#endif
         if (start_thread != end_thread)
             std::cerr << " (WARNING: changed OS thread, from " << start_thread << " to " << end_thread << ")" << std::endl;
     }

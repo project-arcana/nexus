@@ -442,11 +442,11 @@ cc::span<const char* const> get_cmd_args()
     }
 }
 
-bool has_cmd_arg(char const* arg)
+bool has_cmd_arg(cc::string_view arg)
 {
     for (char const* str : get_cmd_args())
     {
-        if (std::strcmp(str, arg) == 0)
+        if (std::strncmp(str, arg.data(), arg.size()) == 0)
             return true;
     }
 

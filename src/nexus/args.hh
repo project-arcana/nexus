@@ -169,5 +169,5 @@ private:
 cc::span<char const* const> get_cmd_args();
 
 /// returns true if the current test or app was launched with the given command line argument
-bool has_cmd_arg(char const* arg);
+bool has_cmd_arg(cc::string_view arg);
 }

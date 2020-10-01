@@ -2,6 +2,7 @@
 
 #include <nexus/fwd.hh>
 
+#include <clean-core/span.hh>
 #include <clean-core/string.hh>
 
 namespace nx
@@ -19,7 +20,8 @@ public:
     cc::string const& functionName() const { return mFunctionName; }
     app_fun_t function() const { return mFunction; }
     int argc() const { return mArgC; }
-    char** argv() const { return mArgV; }
+    char const* const* argv() const { return mArgV; }
+    cc::span<char const* const> arg_span() const { return {mArgV, size_t(mArgC)}; }
 
     // ctor
 public:
@@ -38,7 +40,7 @@ private:
     cc::string mFunctionName;
     app_fun_t mFunction;
     int mArgC = 0;
-    char** mArgV = nullptr;
+    char const* const* mArgV = nullptr;
 
     friend class Nexus;
 };

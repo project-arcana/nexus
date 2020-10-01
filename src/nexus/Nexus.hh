@@ -15,6 +15,6 @@ private:
     cc::vector<cc::string> mSpecificTests;
     bool mPrintHelp = false;
     int mTestArgC = 0;
-    char** mTestArgV = nullptr;
+    char const* const* mTestArgV = nullptr;
 };
 }

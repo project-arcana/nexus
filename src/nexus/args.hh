@@ -164,4 +164,10 @@ private:
     cc::vector<parsed_arg> _parsed_args;
     cc::vector<parsed_pos_arg> _parsed_pos_args;
 };
+
+/// returns all command line arguments of the currently running test or app
+cc::span<char const* const> get_cmd_args();
+
+/// returns true if the current test or app was launched with the given command line argument
+bool has_cmd_arg(cc::string_view arg);
 }

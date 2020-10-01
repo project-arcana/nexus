@@ -1,11 +1,13 @@
 #include "args.hh"
 
+#include <cstdio>
+#include <iostream>
+
 #include <clean-core/pair.hh>
 #include <clean-core/set.hh>
 
-#include <iostream>
-
 #include <nexus/apps/App.hh>
+#include <nexus/tests/Test.hh>
 
 namespace nx
 {
@@ -422,4 +424,33 @@ void args::print_help() const
 
     std::cout << std::endl;
 }
+
+cc::span<const char* const> get_cmd_args()
+{
+    if (Test const* const curr_test = detail::get_current_test())
+    {
+        return curr_test->arg_span();
+    }
+    else if (App const* const curr_app = detail::get_current_app())
+    {
+        return curr_app->arg_span();
+    }
+    else
+    {
+        std::fprintf(stderr, "warning: nx::get_cmd_args() was called outside of an active app or test");
+        return {};
+    }
+}
+
+bool has_cmd_arg(cc::string_view arg)
+{
+    for (char const* str : get_cmd_args())
+    {
+        if (std::strncmp(str, arg.data(), arg.size()) == 0)
+            return true;
+    }
+
+    return false;
+}
+
 }

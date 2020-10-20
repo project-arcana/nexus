@@ -879,7 +879,8 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                     std::cerr << vals[ai].c_str() << " -> " << s.c_str();
                 else
                 {
-                    CC_ASSERT(s == vals[ai] && "input should not have changed");
+                    // NOTE: values can alias, thus some args might have changed
+                    // FIXME: CC_ASSERT(s == vals[ai] && "input should not have changed");
                     std::cerr << s.c_str();
                 }
             }

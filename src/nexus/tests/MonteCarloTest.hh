@@ -173,7 +173,7 @@ private:
     struct executor
     {
         template <class R, class F, size_t... I>
-        static R apply(F&& f, cc::span<value*> inputs, std::index_sequence<I...>)
+        static R apply(F&& f, [[maybe_unused]] cc::span<value*> inputs, std::index_sequence<I...>)
         {
             // TODO: proper rvalue ref support (maybe via forward?)
             return f((*static_cast<std::decay_t<Args>*>(inputs[I]->ptr))...);

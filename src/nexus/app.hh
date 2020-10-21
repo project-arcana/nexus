@@ -49,7 +49,7 @@ App* register_app(char const* name, char const* file, int line, char const* fun_
 template <class... Args>
 void build_app(char const* file, int line, char const* fun_name, app_fun_t fun, char const* name, Args&&... args)
 {
-    auto t = register_app(name, file, line, fun_name, fun);
+    [[maybe_unused]] auto t = register_app(name, file, line, fun_name, fun);
     ((configure(t, args)), ...);
 }
 }

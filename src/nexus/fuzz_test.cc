@@ -57,7 +57,7 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
             }
             catch (assertion_failed_exception const&)
             {
-                std::cerr << "[nexus] fuzz test [" << test->name().c_str() << "] failed." << std::endl;
+                std::cerr << "[nexus] fuzz test [" << test->name() << "] failed." << std::endl;
                 std::cerr << "        (reproduce via TEST(..., reproduce(" << seed << ")) " << std::endl;
                 test->setReproduce(reproduce(seed));
                 return;

@@ -2,13 +2,13 @@
 
 #include <iostream> // TODO: proper log
 
-#include <ctracer/trace.hh>
+#include <clean-core/defer.hh>
+#include <clean-core/intrinsics.hh>
 
 #include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
 #include <nexus/tests/Test.hh>
 
-#include <clean-core/defer.hh>
 
 void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
 {
@@ -38,7 +38,7 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
         nx::detail::reset_assertion_handlers();
     };
 
-    auto c_start = ct::current_cycles();
+    auto c_start = cc::intrin_rdtsc();
     auto it = 0;
     while (true)
     {
@@ -71,7 +71,7 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
         if (it > max_iterations)
             break;
 
-        if (ct::current_cycles() - c_start > max_cycles)
+        if (cc::intrin_rdtsc() - c_start > max_cycles)
             break;
     }
 }

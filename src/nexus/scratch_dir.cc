@@ -3,6 +3,7 @@
 #include <cstdio>
 
 #include <clean-core/macros.hh>
+#include <clean-core/span.hh>
 
 #ifdef CC_OS_WINDOWS
 
@@ -162,30 +163,7 @@ bool delete_directory(char const* path)
 
 #endif
 
-
-struct directory_prefix
-{
-    char buf[32] = {0};
-
-    // filters letters (a-z, A-Z) from the filter string to
-    // build a folder prefix that can be used in a folder name
-    void initialize(char const* filter_string)
-    {
-        auto cursor = 0u;
-        while (*filter_string && cursor < sizeof(buf) + 1)
-        {
-            char c = *filter_string++;
-            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
-            {
-                buf[cursor++] = c;
-            }
-        }
-        buf[cursor] = '\0';
-    }
-};
-}
-
-bool nx::read_system_temp_path(cc::span<char> out_path)
+bool read_system_temp_path(cc::span<char> out_path)
 {
 #ifdef CC_OS_WINDOWS
     DWORD const res = GetTempPathA(DWORD(out_path.size_bytes()), out_path.data());
@@ -216,6 +194,28 @@ bool nx::read_system_temp_path(cc::span<char> out_path)
     std::fprintf(stderr, "[nexus] error: nx::get_system_temp_directory() not supported on this platform\n");
     return false;
 #endif
+}
+
+struct directory_prefix
+{
+    char buf[32] = {0};
+
+    // filters letters (a-z, A-Z) from the filter string to
+    // build a folder prefix that can be used in a folder name
+    void initialize(char const* filter_string)
+    {
+        auto cursor = 0u;
+        while (*filter_string && cursor < sizeof(buf) + 1)
+        {
+            char c = *filter_string++;
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+            {
+                buf[cursor++] = c;
+            }
+        }
+        buf[cursor] = '\0';
+    }
+};
 }
 
 cc::string nx::open_scratch_directory()

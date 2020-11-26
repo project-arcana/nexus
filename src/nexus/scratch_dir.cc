@@ -21,6 +21,10 @@
 #elif defined(CC_OS_LINUX)
 
 #include <cstdlib>
+#include <cstring>
+#include <sys/stat.h>
+#include <ftw.h>
+#include <unistd.h>
 
 #define NX_OS_PATH_SEPARATOR "/"
 
@@ -31,9 +35,16 @@
 
 namespace
 {
+enum class CreateDirResult
+{
+    Success,
+    SuccessAlreadyExists,
+    Error
+};
+
 #ifdef CC_OS_WINDOWS
 
-/// recursively deletes a directory, path must be double nullterminated
+/// recursively deletes a directory, path must be double null-terminated
 bool delete_directory(char const* path)
 {
     SHFILEOPSTRUCT file_op = {nullptr, FO_DELETE, path, nullptr, FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT, false, nullptr, nullptr};
@@ -41,7 +52,113 @@ bool delete_directory(char const* path)
     return (err_del == 0);
 }
 
+CreateDirResult create_directory_recursively(char const* path)
+{
+    // unlike similar functions this creates folders recursively
+    auto const res = ::SHCreateDirectoryExA(nullptr, full_path, nullptr);
+
+    switch (res)
+    {
+    case ERROR_SUCCESS:
+        return CreateDirResult::Success;
+    case ERROR_FILE_EXISTS:
+    case ERROR_ALREADY_EXISTS:
+        return CreateDirResult::SuccessAlreadyExists;
+    default:
+        return CreateDirResult::Error;
+    }
+}
+
 #elif defined(CC_OS_LINUX)
+
+
+CreateDirResult do_mkdir(char const* path, ::mode_t mode)
+{
+    struct ::stat st = {};
+    if (::stat(path, &st) == 0)
+    {
+        // exists
+
+        if (!S_ISDIR(st.st_mode))
+        {
+            // .. but is not a directory
+            return CreateDirResult::Error;
+        }
+
+        return CreateDirResult::SuccessAlreadyExists;
+    }
+    else
+    {
+        // does not exist, create
+        auto const mkdir_res = ::mkdir(path, mode);
+
+        if (mkdir_res != 0)
+            return CreateDirResult::Error;
+
+        return CreateDirResult::Success;
+    }
+}
+
+CreateDirResult create_directory_recursively(char const* path)
+{
+    // modified from mkpath, https://github.com/jleffler/soq/blob/master/src/so-0067-5039/mkpath.c
+    // Licensed CC SA 3.0, Jonathan Leffler
+    /**
+    ** mkpath - ensure all directories in path exist
+    ** Algorithm takes the pessimistic view and works top-down to ensure
+    ** each directory in path exists, rather than optimistically creating
+    ** the last element and working backwards.
+    */
+
+    ::mode_t const mode = 0700;
+    char* pp;
+    char* sp;
+    CreateDirResult status = CreateDirResult::Success;
+    char* copypath = ::strdup(path);
+
+    pp = copypath;
+    while (status != CreateDirResult::Error && (sp = std::strchr(pp, '/')) != 0)
+    {
+        if (sp != pp)
+        {
+            /* Neither root nor double slash in path */
+            *sp = '\0';
+            status = do_mkdir(copypath, mode);
+            *sp = '/';
+        }
+        pp = sp + 1;
+    }
+
+    if (status != CreateDirResult::Error)
+        status = do_mkdir(path, mode);
+
+    ::free(copypath);
+    return status;
+}
+
+int unlink_cb(char const* fpath, struct ::stat const* /*sb*/, int /*typeflag*/, struct ::FTW* /*ftwbuf*/)
+{
+    int const error_code = ::remove(fpath);
+
+    if (error_code)
+    {
+        std::fprintf(stderr, "[nexus] warning: failed to remove temporary file %s\n", fpath);
+    }
+
+    return error_code;
+}
+
+/// recursively deletes a directory
+bool delete_directory(char const* path)
+{
+    // FTW: file tree walk, FTW_DEPTH: depth first traversal
+    // callback (unlink_cb) removes each file
+    // returns the first nonzero result of the callback, or -1 on other errors
+    // result 0: all is good
+    int const res = ::nftw(path, unlink_cb, 64, FTW_DEPTH | FTW_PHYS);
+
+    return res == 0;
+}
 
 #endif
 
@@ -68,7 +185,7 @@ struct directory_prefix
 };
 }
 
-bool nx::get_system_temp_directory(cc::span<char> out_path)
+bool nx::read_system_temp_path(cc::span<char> out_path)
 {
 #ifdef CC_OS_WINDOWS
     DWORD const res = GetTempPathA(DWORD(out_path.size_bytes()), out_path.data());
@@ -104,14 +221,13 @@ bool nx::get_system_temp_directory(cc::span<char> out_path)
 cc::string nx::open_scratch_directory()
 {
     char os_tempdir_buf[512];
-    if (!get_system_temp_directory(os_tempdir_buf))
+    if (!read_system_temp_path(os_tempdir_buf))
     {
         std::fprintf(stderr, "[nexus] error: failed to receive OS temporary directory\n");
         return {};
     }
 
-    void const* app_or_test_ptr = nullptr; // format the address of the app/test for a cheap GUID
-
+    void const* app_or_test_ptr = nullptr;
     directory_prefix prefix;
 
     if (Test const* const curr_test = detail::get_current_test())
@@ -138,25 +254,23 @@ cc::string nx::open_scratch_directory()
 
 
     // recursively create directory
-#ifdef CC_OS_WINDOWS
-
-    // unlike similar functions this creates folders recursively
-    auto const res = ::SHCreateDirectoryExA(nullptr, full_path, nullptr);
-    if (res == ERROR_SUCCESS)
+    CreateDirResult res = create_directory_recursively(full_path);
+    if (res == CreateDirResult::Success)
     {
         // folder didn't exist before
     }
-    else if (res == ERROR_FILE_EXISTS || res == ERROR_ALREADY_EXISTS)
+    else if (res == CreateDirResult::SuccessAlreadyExists)
     {
         // folder already exists, delete and recreate
+
         if (!delete_directory(full_path))
         {
             std::fprintf(stderr, "[nexus] error: nx::open_temp_folder() failed to delete directory \"%s\"\n", full_path);
             return {};
         }
 
-        auto const res2 = ::SHCreateDirectoryExA(nullptr, full_path, nullptr);
-        if (res2 != ERROR_SUCCESS)
+        res = create_directory_recursively(full_path);
+        if (res == CreateDirResult::Error)
         {
             std::fprintf(stderr, "[nexus] error: nx::open_temp_folder() failed to re-create directory \"%s\"\n", full_path);
             return {};
@@ -168,14 +282,6 @@ cc::string nx::open_scratch_directory()
         std::fprintf(stderr, "[nexus] error: nx::open_temp_folder() failed to create directory \"%s\"\n", full_path);
         return {};
     }
-#elif defined(CC_OS_LINUX)
-    // TODO
-    std::fprintf(stderr, "[nexus] error: nx::open_temp_folder() not supported on this platform\n");
-    return {};
-#else
-    std::fprintf(stderr, "[nexus] error: nx::open_temp_folder() not supported on this platform\n");
-    return {};
-#endif
 
     return cc::string(static_cast<char const*>(full_path));
 }

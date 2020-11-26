@@ -227,17 +227,14 @@ cc::string nx::open_scratch_directory()
         return {};
     }
 
-    void const* app_or_test_ptr = nullptr;
     directory_prefix prefix;
 
     if (Test const* const curr_test = detail::get_current_test())
     {
-        app_or_test_ptr = curr_test;
         prefix.initialize(curr_test->name());
     }
     else if (App const* const curr_app = detail::get_current_app())
     {
-        app_or_test_ptr = curr_app;
         prefix.initialize(curr_app->name());
     }
     else

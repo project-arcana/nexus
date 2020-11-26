@@ -55,7 +55,7 @@ bool delete_directory(char const* path)
 CreateDirResult create_directory_recursively(char const* path)
 {
     // unlike similar functions this creates folders recursively
-    auto const res = ::SHCreateDirectoryExA(nullptr, full_path, nullptr);
+    auto const res = ::SHCreateDirectoryExA(nullptr, path, nullptr);
 
     switch (res)
     {

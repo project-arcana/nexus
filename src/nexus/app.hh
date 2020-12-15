@@ -1,10 +1,11 @@
 #pragma once
 
-#include "fwd.hh"
-
 #include <clean-core/macros.hh>
 
 #include <nexus/args.hh>
+#include <nexus/detail/api.hh>
+
+#include "fwd.hh"
 
 #ifndef NX_FORCE_MACRO_PREFIX
 
@@ -44,7 +45,7 @@
 
 namespace nx::detail
 {
-App* register_app(char const* name, char const* file, int line, char const* fun_name, app_fun_t fun);
+NX_API App* register_app(char const* name, char const* file, int line, char const* fun_name, app_fun_t fun);
 
 template <class... Args>
 void build_app(char const* file, int line, char const* fun_name, app_fun_t fun, char const* name, Args&&... args)

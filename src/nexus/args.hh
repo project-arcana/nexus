@@ -7,6 +7,7 @@
 #include <clean-core/vector.hh>
 
 #include <nexus/detail/parse_arg.hh>
+#include <nexus/detail/api.hh>
 
 namespace nx
 {
@@ -20,7 +21,7 @@ namespace nx
 ///   - parse(string_view) version
 ///   - define positional args
 ///   - get with optional return type
-struct args
+struct NX_API args
 {
     // setup
 public:
@@ -166,8 +167,8 @@ private:
 };
 
 /// returns all command line arguments of the currently running test or app
-cc::span<char const* const> get_cmd_args();
+NX_API cc::span<char const* const> get_cmd_args();
 
 /// returns true if the current test or app was launched with the given command line argument
-bool has_cmd_arg(cc::string_view arg);
+NX_API bool has_cmd_arg(cc::string_view arg);
 }

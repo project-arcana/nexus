@@ -7,6 +7,7 @@
 #include <clean-core/string.hh> // could be removed with some work
 
 #include <nexus/approx.hh>
+#include <nexus/detail/api.hh>
 #include <nexus/detail/make_string_repr.hh>
 
 #ifndef NX_FORCE_MACRO_PREFIX
@@ -67,7 +68,7 @@ inline int& number_of_failed_assertions()
     return cnt;
 }
 
-struct check_result
+struct NX_API check_result
 {
     bool is_true = false;
     cc::string lhs;
@@ -156,5 +157,5 @@ struct start_check
     }
 };
 
-void report_failed_check(check_result const& r, char const* check, char const* file, int line, char const* function, bool terminate);
+NX_API void report_failed_check(check_result const& r, char const* check, char const* file, int line, char const* function, bool terminate);
 }

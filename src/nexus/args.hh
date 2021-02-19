@@ -6,8 +6,8 @@
 #include <clean-core/string_view.hh>
 #include <clean-core/vector.hh>
 
-#include <nexus/detail/parse_arg.hh>
 #include <nexus/detail/api.hh>
+#include <nexus/detail/parse_arg.hh>
 
 namespace nx
 {

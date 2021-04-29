@@ -14,18 +14,22 @@ class App
 {
     // properties
 public:
-    cc::string const& name() const { return mName; }
-    cc::string const& file() const { return mFile; }
+    char const* name() const { return mName; }
+    char const* file() const { return mFile; }
     int line() const { return mLine; }
-    cc::string const& functionName() const { return mFunctionName; }
+    char const* functionName() const { return mFunctionName; }
     app_fun_t function() const { return mFunction; }
     int argc() const { return mArgC; }
     char const* const* argv() const { return mArgV; }
-    cc::span<char const* const> arg_span() const { return {mArgV, size_t(mArgC)}; }
+    cc::span<char const* const> argSpan() const { return {mArgV, size_t(mArgC)}; }
 
     // ctor
 public:
-    App(char const* name, char const* file, int line, char const* fun_name, app_fun_t fun);
+    App(char const* name, char const* file, int line, char const* fun_name, app_fun_t fun)
+      : mName(name), mFile(file), mLine(line), mFunctionName(fun_name), mFunction(fun)
+    {
+        CC_CONTRACT(name);
+    }
 
     App(App const&) = delete;
     App(App&&) = delete;
@@ -34,11 +38,12 @@ public:
 
     // members
 private:
-    cc::string mName;
-    cc::string mFile;
-    int mLine;
-    cc::string mFunctionName;
-    app_fun_t mFunction;
+    char const* mName;         // name of the app as given in the macro, ie. APP("name") { .. }
+    char const* mFile;         // filename where the app is defined, directly from __FILE__ during registration
+    int mLine;                 // line where the app is declared in the file, directly from __LINE__
+    char const* mFunctionName; // macro-stringified name of the function, ie. "_nx_anon_app_function_5")
+    app_fun_t mFunction;       // function pointer to the entry
+
     int mArgC = 0;
     char const* const* mArgV = nullptr;
 

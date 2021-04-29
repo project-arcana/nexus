@@ -3,9 +3,11 @@
 #include <clean-core/string.hh>
 #include <clean-core/vector.hh>
 
+#include <nexus/detail/api.hh>
+
 namespace nx
 {
-class Nexus
+class NX_API Nexus
 {
 public:
     void applyCmdArgs(int argc, char** argv);

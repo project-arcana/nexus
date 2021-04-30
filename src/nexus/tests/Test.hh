@@ -16,14 +16,15 @@ class Test
 {
     // properties
 public:
-    cc::string const& name() const { return mName; }
-    cc::string const& file() const { return mFile; }
+    char const* name() const { return mName; }
+    char const* file() const { return mFile; }
     int line() const { return mLine; }
-    cc::string const& functionName() const { return mFunctionName; }
+    char const* functionName() const { return mFunctionName; }
     test_fun_t function() const { return mFunction; }
     int argc() const { return mArgC; }
     char const* const* argv() const { return mArgV; }
-    cc::span<char const* const> arg_span() const { return {mArgV, size_t(mArgC)}; }
+    cc::span<char const* const> argSpan() const { return {mArgV, size_t(mArgC)}; }
+
     size_t seed() const { return mSeed; }
     bool isExclusive() const { return mIsExclusive; }
     bool hasFailed() const { return mFailedAssertions > 0; }
@@ -57,7 +58,11 @@ public:
 
     // ctor
 public:
-    Test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun);
+    Test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun)
+      : mName(name), mFile(file), mLine(line), mFunctionName(fun_name), mFunction(fun)
+    {
+        CC_CONTRACT(name);
+    }
 
     Test(Test const&) = delete;
     Test(Test&&) = delete;
@@ -66,12 +71,12 @@ public:
 
     // members
 private:
-    cc::string mName;
-    cc::string mFile;
-    int mLine;
-    cc::string mFunctionName;
-    test_fun_t mFunction;
-    size_t mSeed;
+    char const* mName;         // name of the test as given in the macro, ie. TEST("name") { .. }
+    char const* mFile;         // filename where the test is defined, directly from __FILE__ during registration
+    int mLine;                 // line where the test is declared in the file, directly from __LINE__
+    char const* mFunctionName; // macro-stringified name of the function, ie. "_nx_anon_test_function_5")
+    test_fun_t mFunction;      // function pointer to the entry
+    size_t mSeed;              // RNG seed, unintialized or user-provided if mSeedOverwritten = true
 
     int mAssertions = 0;
     int mFailedAssertions = 0;

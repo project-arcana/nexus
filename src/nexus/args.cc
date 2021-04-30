@@ -429,15 +429,15 @@ cc::span<const char* const> get_cmd_args()
 {
     if (Test const* const curr_test = detail::get_current_test())
     {
-        return curr_test->arg_span();
+        return curr_test->argSpan();
     }
     else if (App const* const curr_app = detail::get_current_app())
     {
-        return curr_app->arg_span();
+        return curr_app->argSpan();
     }
     else
     {
-        std::fprintf(stderr, "warning: nx::get_cmd_args() was called outside of an active app or test");
+        std::fprintf(stderr, "[nexus] warning: nx::get_cmd_args() was called outside of an active app or test\n");
         return {};
     }
 }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <nexus/detail/api.hh>
+
 namespace nx
 {
 /// easiest-to-use interface
@@ -8,5 +10,5 @@ namespace nx
 /// nx::Nexus nexus;
 /// nexus.applyCmdArgs(argc, argv);
 /// return nexus.run();
-int run(int argc, char** argv);
+NX_API int run(int argc, char** argv);
 }

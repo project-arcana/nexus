@@ -1,10 +1,12 @@
 #pragma once
 
+#include <clean-core/macros.hh>
+
+#include <nexus/detail/api.hh>
+
 #include "check.hh"
 #include "config.hh"
 #include "fwd.hh"
-
-#include <clean-core/macros.hh>
 
 #ifndef NX_FORCE_MACRO_PREFIX
 
@@ -55,21 +57,21 @@ namespace nx
 {
 /// returns the seed to be used for the current test
 /// NOTE: only valid inside a test!
-size_t get_seed();
+NX_API size_t get_seed();
 
 namespace detail
 {
-Test* register_test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun);
-void configure(Test* t, before const& v);
-void configure(Test* t, after const& v);
-void configure(Test* t, exclusive_t const&);
-void configure(Test* t, should_fail_t const&);
-void configure(Test* t, seed const& v);
-void configure(Test* t, endless_t const&);
-void configure(Test* t, reproduce const& r);
-void configure(Test* t, disabled_t const&);
-void configure(Test* t, debug_t const&);
-void configure(Test* t, verbose_t const&);
+NX_API Test* register_test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun);
+NX_API void configure(Test* t, before const& v);
+NX_API void configure(Test* t, after const& v);
+NX_API void configure(Test* t, exclusive_t const&);
+NX_API void configure(Test* t, should_fail_t const&);
+NX_API void configure(Test* t, seed const& v);
+NX_API void configure(Test* t, endless_t const&);
+NX_API void configure(Test* t, reproduce const& r);
+NX_API void configure(Test* t, disabled_t const&);
+NX_API void configure(Test* t, debug_t const&);
+NX_API void configure(Test* t, verbose_t const&);
 
 template <class... Args>
 void build_test(char const* file, int line, char const* fun_name, test_fun_t fun, char const* name, Args&&... args)

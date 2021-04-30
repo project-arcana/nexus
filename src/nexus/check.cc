@@ -27,7 +27,7 @@ void nx::detail::report_failed_check(nx::detail::check_result const& r, const ch
         }
 
         std::cerr << "  at line " << file << ":" << line << std::endl;
-        std::cerr << "  in test " << t->file().c_str() << ":" << t->line() << std::endl;
+        std::cerr << "  in test " << t->file() << ":" << t->line() << std::endl;
         if (t->functionName() != function) // TODO: properly?
             std::cerr << "  in function " << function << std::endl;
     }

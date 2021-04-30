@@ -22,7 +22,6 @@ target_include_directories(nexus PUBLIC src/)
 
 target_link_libraries(nexus PUBLIC
     clean-core
-    ctracer
     typed-geometry
 )
 # TODO: make more dependencies optional?

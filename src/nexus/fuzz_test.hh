@@ -1,8 +1,10 @@
 #pragma once
 
-#include "test.hh"
-
 #include <typed-geometry/feature/random.hh>
+
+#include <nexus/detail/api.hh>
+
+#include "test.hh"
 
 #ifndef NX_FORCE_MACRO_PREFIX
 
@@ -29,5 +31,5 @@
 
 namespace nx::detail
 {
-void execute_fuzz_test(void (*f)(tg::rng&));
+NX_API void execute_fuzz_test(void (*f)(tg::rng&));
 }

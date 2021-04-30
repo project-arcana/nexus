@@ -206,8 +206,8 @@ int nx::Nexus::run()
             if (!t->hasFailed())
             {
                 fails++;
-                std::cerr << "Test [" << t->name().c_str() << "] should have failed but didn't." << std::endl;
-                std::cerr << "  in " << t->file().c_str() << ":" << t->line() << std::endl;
+                std::cerr << "Test [" << t->name() << "] should have failed but didn't." << std::endl;
+                std::cerr << "  in " << t->file() << ":" << t->line() << std::endl;
             }
         }
         else
@@ -229,7 +229,7 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-        printf("  %-60s ... %6d checks in %.4f ms\n", t->name().c_str(), t->mAssertions, test_time_ms);
+        printf("  %-60s ... %6d checks in %.4f ms\n", t->name(), t->mAssertions, test_time_ms);
         if (start_thread != end_thread)
             std::cerr << " (WARNING: changed OS thread, from " << start_thread << " to " << end_thread << ")" << std::endl;
     }
@@ -256,7 +256,7 @@ int nx::Nexus::run()
         for (auto const& t : tests)
             if (t->hasFailed() != t->shouldFail())
             {
-                std::cerr << "[nexus] test [" << t->name().c_str() << "] failed (seed " << t->seed();
+                std::cerr << "[nexus] test [" << t->name() << "] failed (seed " << t->seed();
                 if (t->shouldReproduce())
                 {
                     std::cerr << ", reproduce via TEST(..., reproduce(";
@@ -281,7 +281,7 @@ int nx::Nexus::run()
             std::cerr << "[nexus]   (this can indicate a bug and can be silenced with \"CHECK(true);\")" << std::endl;
             std::cerr << "[nexus]   affected tests:" << std::endl;
             for (auto t : empty_tests)
-                std::cerr << "[nexus]   - [" << t->name().c_str() << "]" << std::endl;
+                std::cerr << "[nexus]   - [" << t->name() << "]" << std::endl;
         }
 
         return EXIT_SUCCESS;

@@ -1,8 +1,9 @@
 #pragma once
 
+#include <cstddef>
+
 #include <clean-core/move.hh>
 #include <clean-core/string.hh>
-#include <clean-core/typedefs.hh>
 
 namespace nx
 {

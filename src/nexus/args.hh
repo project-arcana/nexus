@@ -64,6 +64,27 @@ public:
 
     args& version(cc::string v);
 
+    template <class T>
+    args& add_positional(T& v, char metavar, cc::string desc)
+    {
+        auto& a = add_pos_arg(metavar, cc::move(desc));
+        a.register_var_parse(v);
+        return *this;
+    }
+    template <class T>
+    args& add_positional(char metavar, cc::string desc)
+    {
+        add_pos_arg(metavar, cc::move(desc));
+        return *this;
+    }
+    template <class T>
+    args& add_positional_variadic(char metavar, cc::string desc)
+    {
+        auto& a = add_pos_arg(metavar, cc::move(desc));
+        a.variadic = true;
+        return *this;
+    }
+
     // parse
 public:
     /// takes app args
@@ -140,6 +161,21 @@ private:
         int min_count = 0;
         char metavar = 0;
         cc::string description;
+        bool variadic = false; // only supported for the last one
+        void* target = nullptr;
+        cc::function_ptr<bool(void*, cc::string const&)> on_parse = nullptr;
+
+        template <class T>
+        void register_var_parse(T& v)
+        {
+            target = &v;
+
+            on_parse = [](void* t, cc::string const& s) -> bool {
+                T& vv = *static_cast<T*>(t);
+                static_assert(!std::is_same_v<decltype(nx::detail::parse_arg(vv, s)), nx::detail::not_supported>, "argument type not supported");
+                return nx::detail::parse_arg(vv, s);
+            };
+        }
     };
 
     struct parsed_arg

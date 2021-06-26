@@ -69,8 +69,17 @@ bool args::parse(int argc, char const* const* argv)
     auto show_help = false;
 
     auto const add_pos_arg = [&](cc::string_view s) {
+        // if variadic, just append last one
+        if (!_pos_args.empty() && _parsed_pos_args.size() == _pos_args.size() && _pos_args.back().variadic)
+        {
+            _parsed_pos_args.back().values.push_back(s);
+            return true;
+        }
+
         // TODO: proper
         auto& pa = _parsed_pos_args.emplace_back();
+        if (pos_idx < int(_pos_args.size()))
+            pa.a = &_pos_args[pos_idx];
         pa.values.push_back(s);
         ++pos_idx;
         return true;
@@ -249,6 +258,15 @@ bool args::parse(int argc, char const* const* argv)
                 return false;
         }
     }
+    for (auto& a : _parsed_pos_args)
+    {
+        if (a.a && a.a->target)
+        {
+            CC_ASSERT(a.values.size() == 1 && "variadic pos auto-parse not supported yet");
+            if (!a.a->on_parse(a.a->target, a.values[0]))
+                return false;
+        }
+    }
 
     return true;
 }
@@ -348,6 +366,9 @@ args::pos_arg& args::add_pos_arg(char n, cc::string desc)
     for (auto const& a : _pos_args)
         if (n != 0)
             CC_ASSERT(a.metavar != n && "duplicate positional metavar");
+
+    if (!_pos_args.empty() && _pos_args.back().variadic)
+        CC_UNREACHABLE("cannot add positional args after a variadic one");
 
     auto& a = _pos_args.emplace_back();
     a.metavar = n;

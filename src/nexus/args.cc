@@ -46,6 +46,19 @@ bool args::parse()
     return false;
 }
 
+bool args::parse(cc::string_view args)
+{
+    cc::vector<cc::string> split_args;
+    for (auto a : args.split())
+        split_args.push_back(a);
+
+    cc::vector<char const*> argv;
+    for (auto const& s : split_args)
+        argv.push_back(s.c_str());
+
+    return parse(argv.size(), argv.data());
+}
+
 bool args::parse(int argc, char const* const* argv)
 {
     _parsed_args.clear();

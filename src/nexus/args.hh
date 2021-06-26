@@ -66,7 +66,11 @@ public:
 
     // parse
 public:
-    bool parse(); ///< takes app args
+    /// takes app args
+    bool parse();
+    /// takes space-separated args
+    /// NOTE: does currently NOT respect quotes, though that will change in the future
+    bool parse(cc::string_view args);
     bool parse(int argc, char const* const* argv);
     void print_help() const;
 

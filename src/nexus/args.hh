@@ -92,7 +92,10 @@ public:
     /// takes space-separated args
     /// NOTE: does currently NOT respect quotes, though that will change in the future
     bool parse(cc::string_view args);
+    /// NOTE: does NOT expect the binary filename as first arg, use parse_main for that
     bool parse(int argc, char const* const* argv);
+    /// same as parse, but ignores the first argument
+    bool parse_main(int argc, char const* const* argv);
     void print_help() const;
 
     // retrieval
@@ -117,6 +120,25 @@ public:
                         return def;
                 }
         return def;
+    }
+
+    template <class T>
+    cc::vector<T> get_all(cc::string_view name) const
+    {
+        cc::vector<T> res;
+        for (auto const& a : _parsed_args)
+            for (auto const& n : a.a->names)
+                if (n == name)
+                {
+                    T v;
+                    static_assert(!std::is_same_v<decltype(nx::detail::parse_arg(v, a.value)), nx::detail::not_supported>, //
+                                  "argument type not supported");
+
+                    // TODO: report error case?
+                    if (nx::detail::parse_arg(v, a.value))
+                        res.push_back(cc::move(v));
+                }
+        return res;
     }
 
     cc::vector<cc::string> positional_args() const;

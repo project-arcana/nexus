@@ -271,6 +271,8 @@ bool args::parse(int argc, char const* const* argv)
     return true;
 }
 
+bool args::parse_main(int argc, const char* const* argv) { return parse(argc - 1, argv + 1); }
+
 bool args::has(cc::string_view name) const
 {
     for (auto const& a : _parsed_args)

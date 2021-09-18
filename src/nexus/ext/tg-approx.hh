@@ -195,6 +195,11 @@ detail::tg_comp_abs_approx<tg::size<D, ScalarT>, D, ScalarT> approx(tg::size<D, 
 {
     return {v};
 }
+template <class ScalarT>
+detail::tg_comp_abs_approx<tg::quaternion<ScalarT>, 4, ScalarT> approx(tg::quaternion<ScalarT> const& v)
+{
+    return {v};
+}
 template <class ScalarT, int C, int R>
 detail::tg_mat_abs_approx<tg::mat<C, R, ScalarT>, C, R, ScalarT> approx(tg::mat<C, R, ScalarT> const& v)
 {

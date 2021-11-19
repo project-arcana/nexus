@@ -35,6 +35,7 @@
         ::nx::detail::check_result _nx_impl_r = ::nx::detail::start_check{} < __VA_ARGS__;                              \
         if (!_nx_impl_r.is_true)                                                                                        \
         {                                                                                                               \
+            CC_DEBUG_BREAK();                                                                                           \
             ::nx::detail::number_of_failed_assertions()++;                                                              \
             ::nx::detail::report_failed_check(_nx_impl_r, #__VA_ARGS__, __FILE__, __LINE__, CC_PRETTY_FUNC, terminate); \
         }                                                                                                               \

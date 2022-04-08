@@ -1,8 +1,14 @@
 #include "MonteCarloTest.hh"
 
+#include <rich-log/log.hh>
+
 #include <clean-core/array.hh>
+#include <clean-core/assertf.hh>
 #include <clean-core/defer.hh>
+#include <clean-core/demangle.hh>
+#include <clean-core/map.hh>
 #include <clean-core/pair.hh>
+#include <clean-core/set.hh>
 #include <clean-core/span.hh>
 #include <clean-core/vector.hh>
 
@@ -17,11 +23,7 @@
 #include <nexus/test.hh>
 #include <nexus/tests/Test.hh>
 
-#include <iostream> // DEBUG!
-#include <string>
-
-#include <map>
-#include <set>
+#include <cstdio>
 
 struct nx::MonteCarloTest::machine
 {
@@ -36,7 +38,7 @@ struct nx::MonteCarloTest::machine
         bool has_values() const { return vars.size() > 0; }
     };
 
-    std::map<std::type_index, value_set> values;
+    cc::map<std::type_index, value_set> values;
     cc::vector<function*> test_functions;
     cc::vector<function*> all_functions;
     MonteCarloTest const* test;
@@ -46,21 +48,21 @@ struct nx::MonteCarloTest::machine
     bool has_values_to_execute(function const& f) const
     {
         for (auto a : f.arg_types)
-            if (!values.at(a).has_values())
+            if (!values.get(a).has_values())
                 return false;
         return true;
     }
 
     static std::pair<machine, machine> build_equivalence_checker(MonteCarloTest& test, equivalence const& e, cc::vector<function*>& funs_a, cc::vector<function*>& funs_b)
     {
-        std::set<function*> eq_funs;
-        std::map<std::type_index, std::map<std::string, function*>> eq_funs_by_type;
+        cc::set<function*> eq_funs;
+        cc::map<std::type_index, cc::map<cc::string, function*>> eq_funs_by_type;
 
         // register functions related to the equivalences
         for (auto const& e : test.mEquivalences)
         {
-            auto skip_a = bool(eq_funs_by_type.count(e.type_a));
-            auto skip_b = bool(eq_funs_by_type.count(e.type_b));
+            auto skip_a = bool(eq_funs_by_type.contains_key(e.type_a));
+            auto skip_b = bool(eq_funs_by_type.contains_key(e.type_b));
 
             for (auto& f : test.mFunctions)
             {
@@ -78,15 +80,15 @@ struct nx::MonteCarloTest::machine
                 CC_ASSERT(!(is_eq_a && is_eq_b) && "no function may 'bridge' between types checked for equivalence");
 
                 if (is_eq_a || is_eq_b)
-                    eq_funs.insert(&f);
+                    eq_funs.add(&f);
                 if (is_eq_a && !skip_a)
                 {
-                    CC_ASSERT(!eq_funs_by_type[e.type_a].count(f.name.c_str()) && "functions checked for equivalence need unique names");
+                    CC_ASSERT(!eq_funs_by_type[e.type_a].contains_key(f.name.c_str()) && "functions checked for equivalence need unique names");
                     eq_funs_by_type[e.type_a][f.name.c_str()] = &f;
                 }
                 if (is_eq_b && !skip_b)
                 {
-                    CC_ASSERT(!eq_funs_by_type[e.type_b].count(f.name.c_str()) && "functions checked for equivalence need unique names");
+                    CC_ASSERT(!eq_funs_by_type[e.type_b].contains_key(f.name.c_str()) && "functions checked for equivalence need unique names");
                     eq_funs_by_type[e.type_b][f.name.c_str()] = &f;
                 }
             }
@@ -94,27 +96,28 @@ struct nx::MonteCarloTest::machine
         CC_ASSERT(!eq_funs.empty() && "no functions found to check for equivalence");
 
         // helper for collecting pairs of functions used for equivalence
-        auto const collect_functions = [&](std::type_index ta, std::type_index tb) {
+        auto const collect_functions = [&](std::type_index ta, std::type_index tb)
+        {
             cc::vector<cc::pair<function*, function*>> funs;
 
             // unrelated funs
             for (auto& f : test.mFunctions)
-                if (!eq_funs.count(&f) || f.is_invariant) // always add invariants
+                if (!eq_funs.contains(&f) || f.is_invariant) // always add invariants
                     funs.emplace_back(&f, &f);
 
             // type related funs
-            for (auto const& [name, fa] : eq_funs_by_type.at(ta))
+            for (auto const& [name, fa] : eq_funs_by_type.get(ta))
             {
-                if (!eq_funs_by_type.at(tb).count(name))
+                if (!eq_funs_by_type.get(tb).contains_key(name))
                 {
                     if (fa->is_optional)
                         continue; // not strictly required
 
-                    std::cerr << "operation '" << name << "' not found for type " << tb.name() << std::endl;
-                    std::cerr << "(note: an exact match is required, subtyping may interfere with this)" << std::endl;
+                    LOG_ERROR("operation '{}' not found for type {}", name, tb.name());
+                    LOG_ERROR("(note: an exact match is required, subtyping may interfere with this)");
                 }
-                CC_ASSERT(eq_funs_by_type.at(tb).count(name) && "all functions checked for equivalence need to be defined for both types");
-                auto fb = eq_funs_by_type.at(tb).at(name);
+                CC_ASSERT(eq_funs_by_type.get(tb).contains_key(name) && "all functions checked for equivalence need to be defined for both types");
+                auto fb = eq_funs_by_type.get(tb).get(name);
                 funs.emplace_back(fa, fb);
 
                 // either both or neither can have a precondition
@@ -237,16 +240,16 @@ struct nx::MonteCarloTest::machine
         // sanity checks
         for (auto f : all_functions)
             for (auto a : f->arg_types)
-                if (!values.at(a).can_safely_generate())
+                if (!values.get(a).can_safely_generate())
                 {
-                    std::cerr << "ERROR: no way to generate type " << a.name() << std::endl;
+                    LOG_ERROR("no way to generate type {}", a.name());
                     return false;
                 }
 
         // sanity checks
         if (test_functions.empty())
         {
-            std::cerr << "ERROR: no functions to test" << std::endl;
+            LOG_ERROR("no functions to test");
             return false;
         }
 
@@ -285,7 +288,7 @@ struct nx::MonteCarloTest::machine
             {
                 // get a random parameter with no values
                 auto t = random_choice(rng, f->arg_types);
-                auto const& vs = values.at(t);
+                auto const& vs = values.get(t);
                 if (!vs.has_values())
                 {
                     // try to execute a random safe generator
@@ -296,7 +299,7 @@ struct nx::MonteCarloTest::machine
 
             if (--max_tries < 0)
             {
-                std::cerr << "ERROR: unable to generate values of type " << f->return_type.name() << std::endl;
+                LOG_ERROR("unable to generate values of type {}", f->return_type.name());
                 return nullptr;
             }
         }
@@ -316,7 +319,7 @@ struct nx::MonteCarloTest::machine
             // collect args
             for (auto i = 0; i < arity; ++i)
             {
-                auto& vars = values.at(f->arg_types[i]).vars;
+                auto& vars = values.get(f->arg_types[i]).vars;
                 CC_ASSERT(!vars.empty());
                 auto ai = uniform(rng, size_t(0), vars.size() - 1);
                 args[i] = &vars[ai];
@@ -358,7 +361,7 @@ struct nx::MonteCarloTest::machine
 
     void execute_invariants_for(value& v)
     {
-        for (auto const& f : values.at(v.type).invariants)
+        for (auto const& f : values.get(v.type).invariants)
         {
             CC_ASSERT(f->arity() == 1 && "currently only unary invariants supported");
             CC_ASSERT(f->arg_types[0] == v.type);
@@ -375,7 +378,7 @@ struct nx::MonteCarloTest::machine
             return;
 
         CC_ASSERT(idx >= 0);
-        auto& vs = values.at(v.type);
+        auto& vs = values.get(v.type);
 
         // ensure proper size
         while (idx >= int(vs.vars.size()))
@@ -390,7 +393,7 @@ struct nx::MonteCarloTest::machine
             return -1;
 
         // add value (either new or replace)
-        auto& vs = values.at(type);
+        auto& vs = values.get(type);
         if (uniform(rng, 0.0f, 1.0f) <= 1 / (1.f + vs.vars.size()))
             return int(vs.vars.size());
         else
@@ -406,7 +409,7 @@ struct nx::MonteCarloTest::machine
         if (rng() % 2 == 0)
         {
             auto a = random_choice(rng, ref->arg_types);
-            f = random_choice(rng, values.at(a).mutators_or_generators);
+            f = random_choice(rng, values.get(a).mutators_or_generators);
         }
         else
             f = random_choice(rng, all_functions);
@@ -449,7 +452,7 @@ void nx::MonteCarloTest::execute()
     if (test->shouldReproduce())
     {
         CC_ASSERT(!test->reproduction().trace.empty() && "MCT needs a string reproduce (trace)");
-        std::cerr << "[nexus] replaying MCT trace '" << test->reproduction().trace.c_str() << "'" << std::endl;
+        LOG_ERROR("[nexus] replaying MCT trace '{}'", test->reproduction().trace);
         auto trace = nx::detail::trace_decode(test->reproduction().trace);
         reproduceTrace(trace);
         return;
@@ -474,20 +477,20 @@ void nx::MonteCarloTest::execute()
     catch (nx::detail::assertion_failed_exception const&)
     {
         // on fail: try to minimize trace
-        std::cerr << "[nexus] MONTE_CARLO_TEST failed. Trying to generate minimal reproduction." << std::endl;
+        LOG_ERROR("[nexus] MONTE_CARLO_TEST failed. Trying to generate minimal reproduction.");
         minimizeTrace(trace);
-        std::cerr << "[nexus] .. done. result:" << std::endl;
+        LOG_ERROR("[nexus] .. done. result:");
 
         // set reproduction BEFORE actually executing it
         test->setReproduce(reproduce(trace.serialize_to_string(*this)));
 
         nx::detail::is_silenced() = false;
         nx::detail::always_terminate() = false;
-        std::cout.flush();
-        std::cerr.flush();
+        fflush(stdout);
+        fflush(stderr);
         replayTrace(trace, true);
-        std::cout.flush();
-        std::cerr.flush();
+        fflush(stdout);
+        fflush(stderr);
     }
 
     nx::detail::always_terminate() = false;
@@ -500,7 +503,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
 
     // pre callbacks
     if (verbose)
-        std::cout << " .. executing pre-callbacks (" << mPreCallbacks.size() << ")" << std::endl;
+        LOG_INFO(" .. executing pre-callbacks ({})", mPreCallbacks.size());
     for (auto& f : mPreCallbacks)
         f();
 
@@ -508,17 +511,18 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
     CC_DEFER
     {
         if (verbose)
-            std::cout << " .. executing post-callbacks (" << mPreCallbacks.size() << ")" << std::endl;
+            LOG_INFO(" .. executing post-callbacks ({})", mPreCallbacks.size());
         for (auto& f : mPostCallbacks)
             f();
     };
 
     // helper
-    auto const add_trace = [&trace, verbose](function* f, int vi, cc::span<int> arg_indices) {
+    auto const add_trace = [&trace, verbose](function* f, int vi, cc::span<int> arg_indices)
+    {
         CC_ASSERT(f->arity() == int(arg_indices.size()));
 
         if (verbose)
-            std::cout << " .. execute [" << f->name.c_str() << "]" << std::endl;
+            LOG_INFO(" .. execute [{}]", f->name);
 
         machine_trace::op op;
         op.function_idx = f->internal_idx;
@@ -548,9 +552,9 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
         {
             if (unsuccessful_count > 1000)
             {
-                std::cerr << "ERROR: unable to execute a test function (no precondition satisfied)" << std::endl;
+                LOG_ERROR("unable to execute a test function (no precondition satisfied)");
                 for (auto f : m.test_functions)
-                    std::cerr << "  .. could not execute '" << f->name.c_str() << "'" << std::endl;
+                    LOG_ERROR("  .. could not execute '{}'", f->name);
                 CHECK(false);
                 break;
             }
@@ -616,7 +620,8 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
             REQUIRE(m_a.max_arity() == m_b.max_arity());
 
             // helper functions
-            auto const prepare_execution_b = [&m_b](function* f_b, cc::span<int> arg_indices, cc::span<value*> args_b) {
+            auto const prepare_execution_b = [&m_b](function* f_b, cc::span<int> arg_indices, cc::span<value*> args_b)
+            {
                 CC_ASSERT(arg_indices.size() == args_b.size());
                 CC_ASSERT(int(args_b.size()) == f_b->arity());
 
@@ -624,7 +629,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
                 {
                     auto tb = f_b->arg_types[i];
                     auto ai = arg_indices[i];
-                    auto& vars = m_b.values.at(tb).vars;
+                    auto& vars = m_b.values.get(tb).vars;
                     CC_ASSERT(0 <= ai && ai < int(vars.size()));
 
                     args_b[i] = &vars[ai];
@@ -634,7 +639,8 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
                     CC_ASSERT(f_b->precondition(args_b) && "first precondition was true but second was not");
             };
             auto const bi_execution = [this, &m_a, &m_b, &e, &add_trace](tg::rng& rng, function* f_a, function* f_b, cc::span<value*> args_a,
-                                                                         cc::span<value*> args_b, cc::span<int> arg_indices) {
+                                                                         cc::span<value*> args_b, cc::span<int> arg_indices)
+            {
                 CC_ASSERT(f_a->internal_idx == f_b->internal_idx);
                 CC_ASSERT(f_a->arity() == f_b->arity());
                 CC_ASSERT(f_a->arity() == int(args_a.size()));
@@ -695,9 +701,9 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
             {
                 if (unsuccessful_count > 1000)
                 {
-                    std::cerr << "ERROR: unable to execute a test function (no precondition satisfied)" << std::endl;
+                    LOG_ERROR(" unable to execute a test function (no precondition satisfied)");
                     for (auto f : m_a.test_functions)
-                        std::cerr << "  .. could not execute '" << f->name.c_str() << "'" << std::endl;
+                        LOG_ERROR("  .. could not execute '{}'", f->name);
                     CHECK(false);
                     break;
                 }
@@ -753,7 +759,7 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
 
     while (found_smaller) // TODO: time limit
     {
-        std::cerr << "[nexus]   .. trace complexity " << trace.complexity() << std::endl;
+        LOG_ERROR("[nexus]   .. trace complexity {}", trace.complexity());
         auto opts = trace.build_minimizer();
 
         found_smaller = false;
@@ -781,16 +787,16 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
 bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode)
 {
     if (print_mode)
-        std::cerr << "[nexus] =============== TRACE BEGIN ===============" << std::endl;
+        LOG_ERROR("[nexus] =============== TRACE BEGIN ===============");
     CC_DEFER
     {
         if (print_mode)
-            std::cerr << "[nexus] =============== TRACE END ===============" << std::endl;
+            LOG_ERROR("[nexus] =============== TRACE END ===============");
     };
 
     // pre callbacks
     if (print_mode && !mPreCallbacks.empty())
-        std::cerr << "[nexus]   executing pre-callbacks" << std::endl;
+        LOG_ERROR("[nexus]   executing pre-callbacks");
     for (auto& f : mPreCallbacks)
         f();
 
@@ -798,21 +804,23 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     CC_DEFER
     {
         if (print_mode && !mPostCallbacks.empty())
-            std::cerr << "[nexus]   executing post-callbacks" << std::endl;
+            LOG_ERROR("[nexus]   executing post-callbacks");
         for (auto& f : mPostCallbacks)
             f();
     };
 
     // var names
-    std::map<std::pair<std::type_index, int>, int> var_names;
-    auto const get_var_name = [&var_names](std::type_index t, int vi) {
-        if (var_names.count({t, vi}))
-            return var_names.at({t, vi});
+    cc::map<cc::pair<std::type_index, int>, int> var_names;
+    auto const get_var_name = [&var_names](std::type_index t, int vi)
+    {
+        if (var_names.contains_key({t, vi}))
+            return var_names.get({t, vi});
         auto n = int(var_names.size());
         var_names[{t, vi}] = n;
         return n;
     };
-    auto const value_to_string = [this](value const& v) -> cc::string {
+    auto const value_to_string = [this](value const& v) -> cc::string
+    {
         CC_ASSERT(!v.is_void());
         if (!mTypeMetadata.contains_key(v.type))
             return "???";
@@ -825,70 +833,97 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     // print symbolic execution
     if (print_mode)
     {
-        std::cerr << "[nexus] symbolic:" << std::endl;
+        LOG_ERROR("[nexus] symbolic:");
         for (auto const& op : trace.ops)
         {
-            std::cerr << "[nexus]   ";
+            cc::string s;
             if (op.return_value_idx != -1)
-                std::cerr << "v" << get_var_name(op.fun->return_type, op.return_value_idx) << " = ";
-            std::cerr << "[" << op.fun->name.c_str() << "]";
+            {
+                s += "v";
+                s += cc::to_string(get_var_name(op.fun->return_type, op.return_value_idx));
+                s += " = ";
+            }
+            s += "[";
+            s += op.fun->name.c_str();
+            s += "]";
             if (op.fun->arity() > 0)
             {
-                std::cerr << "(";
+                s += "(";
                 for (auto ai = 0; ai < op.fun->arity(); ++ai)
                 {
                     if (ai > 0)
-                        std::cerr << ", ";
+                        s += ", ";
                     if (op.fun->arg_types_could_change[ai])
-                        std::cerr << "&";
-                    std::cerr << "v" << get_var_name(op.fun->arg_types[ai], trace.arg_indices[op.args_start_idx + ai]);
+                        s += "&";
+                    s += "v";
+                    s += cc::to_string(get_var_name(op.fun->arg_types[ai], trace.arg_indices[op.args_start_idx + ai]));
                 }
-                std::cerr << ")";
+                s += ")";
             }
-            std::cerr << std::endl;
+            if (op.return_value_idx != -1)
+            {
+                s += " : ";
+                s += cc::demangle(op.fun->return_type.name());
+            }
+            LOG_ERROR("[nexus]   {}", s);
         }
-        std::cerr << "[nexus] actual:" << std::endl;
+        LOG_ERROR("[nexus] actual:");
     }
-    auto const print_inputs = [&value_to_string](function* f, cc::span<value*> args, cc::span<cc::string> vals) {
-        std::cerr << "[nexus]   exec [" << f->name.c_str() << "]";
+    auto const print_inputs = [&value_to_string](function* f, cc::span<value*> args, cc::span<cc::string> vals)
+    {
+        cc::string s;
+        s += "exec [";
+        s += f->name;
+        s += "]";
         if (!args.empty())
         {
-            std::cerr << "(";
+            s += "(";
             for (auto ai = 0; ai < f->arity(); ++ai)
             {
                 if (ai > 0)
-                    std::cerr << ", ";
+                    s += ", ";
                 vals[ai] = value_to_string(*args[ai]);
-                std::cerr << vals[ai].c_str();
+                s += vals[ai].c_str();
             }
-            std::cerr << ")";
+            s += ")";
         }
-        std::cerr << std::endl;
+        LOG_ERROR("[nexus]   {}", s);
     };
-    auto const print_outputs = [&value_to_string](function* f, value const& v, cc::span<value*> args, cc::span<const cc::string> vals) {
-        std::cerr << "[nexus]        [" << f->name.c_str() << "]";
+    auto const print_outputs = [&value_to_string](cc::string_view prefix, function* f, value const& v, cc::span<value*> args, cc::span<const cc::string> vals)
+    {
+        cc::string s;
+        s += "[";
+        s += f->name;
+        s += "]";
         if (!args.empty())
         {
-            std::cerr << "(";
+            s += "(";
             for (auto ai = 0; ai < f->arity(); ++ai)
             {
                 if (ai > 0)
-                    std::cerr << ", ";
-                auto s = value_to_string(*args[ai]);
+                    s += ", ";
+                auto vs = value_to_string(*args[ai]);
                 if (f->arg_types_could_change[ai])
-                    std::cerr << vals[ai].c_str() << " -> " << s.c_str();
+                {
+                    s += vals[ai];
+                    s += " -> ";
+                    s += vs;
+                }
                 else
                 {
                     // NOTE: values can alias, thus some args might have changed
                     // FIXME: CC_ASSERT(s == vals[ai] && "input should not have changed");
-                    std::cerr << s.c_str();
+                    s += vs;
                 }
             }
-            std::cerr << ")";
+            s += ")";
         }
         if (f->return_type != typeid(void))
-            std::cerr << " -> " << value_to_string(v).c_str();
-        std::cerr << std::endl;
+        {
+            s += " -> ";
+            s += value_to_string(v);
+        }
+        LOG_ERROR("[nexus]     {} {}", prefix, s);
     };
 
     // normal mode: no equivalence checking
@@ -927,7 +962,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
 
             // print outputs
             if (print_mode)
-                print_outputs(f, v, args, arg_string_buffer);
+                print_outputs("  ", f, v, args, arg_string_buffer);
 
             // check invariants
             m.execute_invariants_for(f, v, args);
@@ -961,7 +996,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
         for (auto const& op : trace.ops)
         {
             auto f_a = funs_a[op.function_idx];
-            auto f_b = funs_a[op.function_idx];
+            auto f_b = funs_b[op.function_idx];
 
             // collect arguments
             auto args_a = cc::span<value*>(args_buffer_a.data(), f_a->arity());
@@ -992,8 +1027,8 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
             // print outputs
             if (print_mode)
             {
-                print_outputs(f_a, va, args_a, arg_string_buffer_a);
-                print_outputs(f_b, vb, args_b, arg_string_buffer_b);
+                print_outputs("A:", f_a, va, args_a, arg_string_buffer_a);
+                print_outputs("B:", f_b, vb, args_b, arg_string_buffer_b);
             }
 
             // check invariants
@@ -1045,20 +1080,23 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
 
 void nx::MonteCarloTest::printSetup()
 {
-    std::cout << "registered functions:" << std::endl;
+    LOG_INFO("registered functions:");
     for (auto const& f : mFunctions)
     {
-        std::cout << "  " << f.name.c_str() << " : (";
+        cc::string s;
+        s += f.name;
+        s += " : (";
         for (auto i = 0; i < f.arity(); ++i)
         {
             if (i > 0)
-                std::cout << ", ";
-            std::cout << f.arg_types[i].name();
+                s += ", ";
+            s += f.arg_types[i].name();
         }
-        std::cout << ") -> " << f.return_type.name();
+        s += ") -> ";
+        s += f.return_type.name();
         if (f.is_invariant)
-            std::cout << " [INVARIANT]";
-        std::cout << std::endl;
+            s += " [INVARIANT]";
+        LOG_INFO("  {}", s);
     }
 }
 
@@ -1114,7 +1152,7 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
         }
     };
 
-    std::map<std::type_index, varset_info> varsets;
+    cc::map<std::type_index, varset_info> varsets;
 
     // collect vars
     for (auto i = 0; i < int(ops.size()); ++i)
@@ -1149,7 +1187,7 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
             can_disable = true;
         else
         {
-            auto const& vi = varsets.at(op.fun->return_type).vars[op.return_value_idx];
+            auto const& vi = varsets.get(op.fun->return_type).vars[op.return_value_idx];
 
             // not the first write
             if (i > vi.first_write)
@@ -1169,57 +1207,63 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
     if (disable_cnt > 10)
     {
         auto seed = get_seed() + complexity();
-        min.options.emplace_back([can_disable_fun, seed](machine_trace const& old_t) {
-            tg::rng rng;
-            rng.seed(seed);
-            auto t = old_t;
-            t.ops.clear();
-            for (auto i = 0; i < int(old_t.ops.size()); ++i)
-                if (!can_disable_fun[i] || tg::uniform<bool>(rng))
-                    t.ops.push_back(old_t.ops[i]);
-            t.ops.pop_back();
-            return t;
-        });
+        min.options.emplace_back(
+            [can_disable_fun, seed](machine_trace const& old_t)
+            {
+                tg::rng rng;
+                rng.seed(seed);
+                auto t = old_t;
+                t.ops.clear();
+                for (auto i = 0; i < int(old_t.ops.size()); ++i)
+                    if (!can_disable_fun[i] || tg::uniform<bool>(rng))
+                        t.ops.push_back(old_t.ops[i]);
+                t.ops.pop_back();
+                return t;
+            });
     }
 
     // disable single functions
     for (int i = 0; i < int(ops.size()); ++i)
         if (can_disable_fun[i])
-            min.options.emplace_back([i](machine_trace const& old_t) {
-                auto t = old_t;
-                for (auto j = i + 1; j < int(t.ops.size()); ++j)
-                    t.ops[j - 1] = t.ops[j];
-                t.ops.pop_back();
-                return t;
-            });
+            min.options.emplace_back(
+                [i](machine_trace const& old_t)
+                {
+                    auto t = old_t;
+                    for (auto j = i + 1; j < int(t.ops.size()); ++j)
+                        t.ops[j - 1] = t.ops[j];
+                    t.ops.pop_back();
+                    return t;
+                });
 
     // try to rename complete vars
     for (auto const& kvp : varsets)
     {
-        auto type = kvp.first;
+        auto type = kvp.key;
         CC_ASSERT(type != typeid(void));
-        auto const& vs = kvp.second;
+        auto const& vs = kvp.value;
         for (int i_from = int(vs.vars.size()) - 1; i_from > 0; --i_from)
         {
             if (!vs.vars[i_from].has_reads && !vs.vars[i_from].has_writes)
                 continue; // unused var slot
 
             for (int i_to = 0; i_to < i_from; ++i_to)
-                min.options.emplace_back([type, i_from, i_to](machine_trace const& old_t) {
-                    auto t = old_t;
-                    for (auto& op : t.ops)
+                min.options.emplace_back(
+                    [type, i_from, i_to](machine_trace const& old_t)
                     {
-                        // rename return val
-                        if (op.fun->return_type == type && op.return_value_idx == i_from)
-                            op.return_value_idx = i_to;
+                        auto t = old_t;
+                        for (auto& op : t.ops)
+                        {
+                            // rename return val
+                            if (op.fun->return_type == type && op.return_value_idx == i_from)
+                                op.return_value_idx = i_to;
 
-                        // rename args
-                        for (auto ai = 0; ai < op.fun->arity(); ++ai)
-                            if (op.fun->arg_types[ai] == type && t.arg_indices[op.args_start_idx + ai] == i_from)
-                                t.arg_indices[op.args_start_idx + ai] = i_to;
-                    }
-                    return t;
-                });
+                            // rename args
+                            for (auto ai = 0; ai < op.fun->arity(); ++ai)
+                                if (op.fun->arg_types[ai] == type && t.arg_indices[op.args_start_idx + ai] == i_from)
+                                    t.arg_indices[op.args_start_idx + ai] = i_to;
+                        }
+                        return t;
+                    });
         }
     }
 
@@ -1230,18 +1274,20 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
         for (auto ai = 0; ai < op.fun->arity(); ++ai)
         {
             auto vi = arg_indices[op.args_start_idx + ai];
-            auto const& vs = varsets.at(op.fun->arg_types[ai]);
+            auto const& vs = varsets.get(op.fun->arg_types[ai]);
             for (auto j = 0; j < vi; ++j)
             {
                 if (vs.vars[j].first_write >= i)
                     continue; // var was not written before
 
-                min.options.emplace_back([i, ai, j](machine_trace const& old_t) {
-                    auto t = old_t;
-                    auto const& op = t.ops[i];
-                    t.arg_indices[op.args_start_idx + ai] = j;
-                    return t;
-                });
+                min.options.emplace_back(
+                    [i, ai, j](machine_trace const& old_t)
+                    {
+                        auto t = old_t;
+                        auto const& op = t.ops[i];
+                        t.arg_indices[op.args_start_idx + ai] = j;
+                        return t;
+                    });
             }
         }
     }

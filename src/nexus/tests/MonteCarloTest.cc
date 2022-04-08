@@ -140,9 +140,19 @@ struct nx::MonteCarloTest::machine
             if (!f_a->is_invariant)
             {
                 if (f_a->return_type == e.type_a)
+                {
+                    if (f_b->return_type != e.type_b)
+                        LOG_ERROR("bisimulation return type mismatch for '{}': expected {}, got {}", f_a->name, cc::demangle(e.type_b.name()),
+                                  cc::demangle(f_b->return_type.name()));
                     CC_ASSERT(f_b->return_type == e.type_b);
+                }
                 else
+                {
+                    if (f_a->return_type != f_b->return_type)
+                        LOG_ERROR("bisimulation return type mismatch for '{}': {} vs {}", f_a->name, cc::demangle(f_a->return_type.name()),
+                                  cc::demangle(f_b->return_type.name()));
                     CC_ASSERT(f_a->return_type == f_b->return_type);
+                }
 
                 for (auto i = 0; i < f_a->arity(); ++i)
                 {

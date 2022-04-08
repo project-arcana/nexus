@@ -105,13 +105,15 @@ private:
         static_assert(std::is_invocable_v<F, A const&, B const&>, "function must be callable with (A const&, B const&)");
         auto& eq = mEquivalences.emplace_back(typeid(A), typeid(B));
         if constexpr (std::is_same_v<R, void>)
-            eq.test = [test = cc::move(test)](value const& va, value const& vb) {
+            eq.test = [test = cc::move(test)](value const& va, value const& vb)
+            {
                 auto const& a = *static_cast<std::decay_t<A> const*>(va.ptr);
                 auto const& b = *static_cast<std::decay_t<B> const*>(vb.ptr);
                 test(a, b);
             };
         else if constexpr (std::is_same_v<R, bool>)
-            eq.test = [test = cc::move(test)](value const& va, value const& vb) {
+            eq.test = [test = cc::move(test)](value const& va, value const& vb)
+            {
                 auto const& a = *static_cast<std::decay_t<A> const*>(va.ptr);
                 auto const& b = *static_cast<std::decay_t<B> const*>(vb.ptr);
                 CHECK(test(a, b));
@@ -198,7 +200,8 @@ private:
             (arg_types.emplace_back(typeid(std::decay_t<Args>)), ...);
             (arg_types_could_change.push_back(std::is_reference_v<Args> && !std::is_const_v<std::remove_reference_t<Args>>), ...);
 
-            execute = [f = cc::forward<F>(f)](cc::span<value*> inputs) -> value {
+            execute = [f = cc::forward<F>(f)](cc::span<value*> inputs) -> value
+            {
                 if constexpr (std::is_same_v<R, void>)
                 {
                     executor<Args...>::template apply<std::decay_t<R>>(f, inputs, std::index_sequence_for<Args...>());
@@ -284,15 +287,14 @@ private:
             CC_ASSERT(!precondition && "already has a precondition");
             static_assert(std::is_same_v<R, bool>, "precondition must return bool");
             // check correct argument types
-            CC_ASSERT(sizeof...(Args) == arg_types.size() && "precondition arguments must match op arguments");
+            CC_ASSERT(sizeof...(Args) <= arg_types.size() && "precondition arguments must at most be as many as op arguments");
             cc::capped_vector<std::type_index, sizeof...(Args)> p_types;
             (p_types.emplace_back(typeid(std::decay_t<Args>)), ...);
             for (size_t i = 0; i < sizeof...(Args); ++i)
                 CC_ASSERT(p_types[i] == arg_types[i] && "precondition arguments types must match op arguments");
 
-            precondition = [f = cc::forward<F>(f)](cc::span<value*> inputs) -> bool {
-                return executor<Args...>::template apply<bool>(f, inputs, std::index_sequence_for<Args...>());
-            };
+            precondition = [f = cc::forward<F>(f)](cc::span<value*> inputs) -> bool
+            { return executor<Args...>::template apply<bool>(f, inputs.subspan(0, sizeof...(Args)), std::index_sequence_for<Args...>()); };
         }
 
     private:
@@ -364,7 +366,8 @@ private:
         auto& md = mTypeMetadata[typeid(T)];
 
         if constexpr (cc::has_operator_equal<T>)
-            md.check_equality = [](value const& va, value const& vb) {
+            md.check_equality = [](value const& va, value const& vb)
+            {
                 auto const& a = *static_cast<T const*>(va.ptr);
                 auto const& b = *static_cast<T const*>(vb.ptr);
                 CHECK(a == b);

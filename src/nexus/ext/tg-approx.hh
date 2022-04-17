@@ -192,9 +192,9 @@ struct tg_angle_approx
         auto diff = _value.radians() - rhs.radians();
         if (diff < 0)
             diff = -diff;
-        diff = std::fmod(diff, tg::pi_scalar<T>);
+        diff = std::fmod(diff, 2 * tg::pi_scalar<T>);
 
-        return diff < _eps_abs.radians();
+        return diff <= _eps_abs.radians();
     }
     template <class U>
     bool operator!=(U const& rhs) const
@@ -204,7 +204,8 @@ struct tg_angle_approx
 
 private:
     angle_t _value;
-    angle_t _eps_abs = angle_t::from_radians(default_abs_epsilon<T>::value);
+    // NOTE: uses _rel_ eps, because range is fixed 0..2pi
+    angle_t _eps_abs = angle_t::from_radians(default_rel_epsilon<T>::value);
 };
 
 template <class T, class U>
@@ -221,12 +222,12 @@ bool operator!=(U const& lhs, tg_angle_approx<T> const& rhs)
 template <class T>
 cc::string to_string(tg_angle_approx<T> const& v)
 {
-    auto s = "approx " + nx::detail::make_string_repr(v.value().degree()) + "°";
+    auto s = "approx " + nx::detail::make_string_repr(v.value().radians()) + " rad";
     if (v.get_abs().radians() != default_abs_epsilon<T>::value)
     {
         s += " (abs: ";
         s += nx::detail::make_string_repr(v.get_abs().radians());
-        s += "°)";
+        s += " rad)";
     }
     return s;
 }

@@ -8,6 +8,8 @@
 #include <nexus/approx.hh>
 #include <nexus/detail/make_string_repr.hh>
 
+#include <cmath>
+
 namespace nx
 {
 namespace detail
@@ -163,6 +165,71 @@ cc::string to_string(tg_mat_abs_approx<T, C, R, ScalarT> const& v)
     }
     return s;
 }
+
+template <class T>
+struct tg_angle_approx
+{
+    using angle_t = tg::angle_t<T>;
+
+    tg_angle_approx(angle_t const& v) : _value(v) {}
+
+    angle_t const& value() const { return _value; }
+
+    tg_angle_approx abs(angle_t const& e) const
+    {
+        auto a = *this;
+        a._eps_abs = e;
+        return a;
+    }
+
+    angle_t get_abs() const { return _eps_abs; }
+
+    template <class U>
+    bool operator==(U const& rhs) const
+    {
+        static_assert(std::is_same_v<angle_t, U>, "types must match exactly to prevent errors");
+
+        auto diff = _value.radians() - rhs.radians();
+        if (diff < 0)
+            diff = -diff;
+        diff = std::fmod(diff, tg::pi_scalar<T>);
+
+        return diff < _eps_abs.radians();
+    }
+    template <class U>
+    bool operator!=(U const& rhs) const
+    {
+        return !operator==(rhs);
+    }
+
+private:
+    angle_t _value;
+    angle_t _eps_abs = angle_t::from_radians(default_abs_epsilon<T>::value);
+};
+
+template <class T, class U>
+bool operator==(U const& lhs, tg_angle_approx<T> const& rhs)
+{
+    return rhs.operator==(lhs);
+}
+template <class T, class U>
+bool operator!=(U const& lhs, tg_angle_approx<T> const& rhs)
+{
+    return rhs.operator!=(lhs);
+}
+
+template <class T>
+cc::string to_string(tg_angle_approx<T> const& v)
+{
+    auto s = "approx " + nx::detail::make_string_repr(v.value().degree()) + "°";
+    if (v.get_abs().radians() != default_abs_epsilon<T>::value)
+    {
+        s += " (abs: ";
+        s += nx::detail::make_string_repr(v.get_abs().radians());
+        s += "°)";
+    }
+    return s;
+}
 }
 
 template <class ScalarT, int D>
@@ -202,6 +269,11 @@ detail::tg_comp_abs_approx<tg::quaternion<ScalarT>, 4, ScalarT> approx(tg::quate
 }
 template <class ScalarT, int C, int R>
 detail::tg_mat_abs_approx<tg::mat<C, R, ScalarT>, C, R, ScalarT> approx(tg::mat<C, R, ScalarT> const& v)
+{
+    return {v};
+}
+template <class T>
+detail::tg_angle_approx<T> approx(tg::angle_t<T> const& v)
 {
     return {v};
 }

@@ -86,6 +86,26 @@ struct abs_approx
     {
         return !operator==(rhs);
     }
+    template <class U>
+    bool operator>(U const& rhs) const
+    {
+        return _value > rhs || operator==(rhs);
+    }
+    template <class U>
+    bool operator>=(U const& rhs) const
+    {
+        return _value >= rhs || operator==(rhs);
+    }
+    template <class U>
+    bool operator<(U const& rhs) const
+    {
+        return _value < rhs || operator==(rhs);
+    }
+    template <class U>
+    bool operator<=(U const& rhs) const
+    {
+        return _value <= rhs || operator==(rhs);
+    }
 
 private:
     T _value;
@@ -102,6 +122,26 @@ template <class T, class U>
 bool operator!=(U const& lhs, abs_approx<T> const& rhs)
 {
     return rhs.operator!=(lhs);
+}
+template <class T, class U>
+bool operator>(U const& lhs, abs_approx<T> const& rhs)
+{
+    return rhs.operator>(lhs);
+}
+template <class T, class U>
+bool operator>=(U const& lhs, abs_approx<T> const& rhs)
+{
+    return rhs.operator>=(lhs);
+}
+template <class T, class U>
+bool operator<(U const& lhs, abs_approx<T> const& rhs)
+{
+    return rhs.operator<(lhs);
+}
+template <class T, class U>
+bool operator<=(U const& lhs, abs_approx<T> const& rhs)
+{
+    return rhs.operator<=(lhs);
 }
 
 template <class T>

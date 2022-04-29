@@ -38,20 +38,32 @@
 // second layer to make sure function is expanded
 #define NX_DETAIL_REGISTER_TEST(function, ...) NX_DETAIL_REGISTER_TEST2(function, __VA_ARGS__)
 
-#define NX_DETAIL_REGISTER_TEST2(function, ...)                                              \
-    static void function();                                                                  \
-    namespace                                                                                \
-    {                                                                                        \
-    struct _nx_register##function                                                            \
-    {                                                                                        \
-        _nx_register##function()                                                             \
-        {                                                                                    \
-            using namespace nx;                                                              \
-            ::nx::detail::build_test(__FILE__, __LINE__, #function, &function, __VA_ARGS__); \
-        }                                                                                    \
-    } _nx_obj_register##function;                                                            \
-    }                                                                                        \
-    static void function()
+#define NX_DETAIL_REGISTER_TEST2(function, ...)                                                                                                        \
+    static void function##_run();                                                                                                                      \
+    static void function##_before()                                                                                                                    \
+    {                                                                                                                                                  \
+        ::nx::detail::number_of_assertions() = 0;                                                                                                      \
+        ::nx::detail::number_of_failed_assertions() = 0;                                                                                               \
+    }                                                                                                                                                  \
+    static void function##_after(::nx::detail::local_check_counters* counters)                                                                         \
+    {                                                                                                                                                  \
+        counters->num_checks = ::nx::detail::number_of_assertions();                                                                                   \
+        counters->num_failed_checks = ::nx::detail::number_of_failed_assertions();                                                                     \
+    }                                                                                                                                                  \
+    namespace                                                                                                                                          \
+    {                                                                                                                                                  \
+    struct _nx_register##function                                                                                                                      \
+    {                                                                                                                                                  \
+        ::nx::detail::local_check_counters m_counters = {};                                                                                            \
+                                                                                                                                                       \
+        _nx_register##function()                                                                                                                       \
+        {                                                                                                                                              \
+            using namespace nx;                                                                                                                        \
+            ::nx::detail::build_test(__FILE__, __LINE__, #function, &function##_run, &function##_before, &function##_after, &m_counters, __VA_ARGS__); \
+        }                                                                                                                                              \
+    } _nx_obj_register##function;                                                                                                                      \
+    }                                                                                                                                                  \
+    static void function##_run()
 
 namespace nx
 {
@@ -61,7 +73,8 @@ NX_API size_t get_seed();
 
 namespace detail
 {
-NX_API Test* register_test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun);
+NX_API Test* register_test(
+    char const* name, char const* file, int line, char const* fun_name, test_fun_t fun, test_fun_before_t fun_before, test_fun_after_t fun_after, local_check_counters* counters);
 NX_API void configure(Test* t, before const& v);
 NX_API void configure(Test* t, after const& v);
 NX_API void configure(Test* t, exclusive_t const&);
@@ -73,10 +86,19 @@ NX_API void configure(Test* t, disabled_t const&);
 NX_API void configure(Test* t, debug_t const&);
 NX_API void configure(Test* t, verbose_t const&);
 
+
 template <class... Args>
-void build_test(char const* file, int line, char const* fun_name, test_fun_t fun, char const* name, Args&&... args)
+void build_test(char const* file,
+                int line,
+                char const* fun_name,
+                test_fun_t fun,
+                test_fun_before_t fun_before,
+                test_fun_after_t fun_after,
+                local_check_counters* counters,
+                char const* name,
+                Args&&... args)
 {
-    [[maybe_unused]] auto t = register_test(name, file, line, fun_name, fun);
+    [[maybe_unused]] auto t = register_test(name, file, line, fun_name, fun, fun_before, fun_after, counters);
     ((configure(t, args)), ...);
 }
 }

@@ -166,17 +166,18 @@ int nx::Nexus::run()
     // execute tests
     // TODO: timings and statistics and so on
     auto total_time_ms = 0.0;
-    auto fails = 0;
-    auto assertions = 0;
-    auto failed_assertions = 0;
-    for (auto t : tests_to_run)
+    auto num_failed_tests = 0;
+    auto total_num_checks = 0;
+    auto total_num_failed_checks = 0;
+
+    for (auto* t : tests_to_run)
     {
         // prepare
-        detail::number_of_assertions() = 0;
-        detail::number_of_failed_assertions() = 0;
         curr_test() = t;
         detail::is_silenced() = t->mShouldFail;
         detail::always_terminate() = false;
+
+        t->mFunctionBefore();
 
         // execute and measure
         auto const start_thread = std::this_thread::get_id();
@@ -197,27 +198,37 @@ int nx::Nexus::run()
         auto const end = std::chrono::high_resolution_clock::now();
         auto const end_thread = std::this_thread::get_id();
 
+        t->mFunctionAfter(t->mCounters);
+
         // report
         curr_test() = nullptr;
-        t->mAssertions = detail::number_of_assertions();
-        t->mFailedAssertions = detail::number_of_failed_assertions();
+
+        auto const num_checks = t->mCounters->num_checks;
+        auto const num_failed_checks = t->mCounters->num_failed_checks;
+
+        total_num_checks += num_checks;
+
+        t->setDidFail(num_failed_checks > 0);
+
         if (t->mShouldFail)
         {
-            if (!t->hasFailed())
+            if (!t->didFail())
             {
-                fails++;
+                num_failed_tests++;
                 std::cerr << "Test [" << t->name() << "] should have failed but didn't." << std::endl;
                 std::cerr << "  in " << t->file() << ":" << t->line() << std::endl;
             }
         }
         else
         {
-            if (t->hasFailed())
-                fails++;
-            failed_assertions += t->mFailedAssertions;
+            if (t->didFail())
+                num_failed_tests++;
+
+            total_num_failed_checks += num_failed_checks;
         }
-        assertions += t->mAssertions;
-        if (t->mAssertions == 0)
+
+
+        if (num_checks == 0)
             empty_tests.push_back(t);
 
         // reset
@@ -229,7 +240,7 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-        printf("  %-60s ... %6d checks in %.4f ms\n", t->name(), t->mAssertions, test_time_ms);
+        printf("  %-60s ... %6d checks in %.4f ms\n", t->name(), num_checks, test_time_ms);
         if (start_thread != end_thread)
             std::cerr << " (WARNING: changed OS thread, from " << start_thread << " to " << end_thread << ")" << std::endl;
     }
@@ -237,24 +248,24 @@ int nx::Nexus::run()
     std::cout.flush();
     std::cerr.flush();
     std::cout << "==============================================================================" << std::endl;
-    std::cout << "[nexus] passed " << tests_to_run.size() - fails << " of " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests")
-              << " in " << total_time_ms << " ms";
-    if (fails > 0)
-        std::cout << " (" << fails << " failed)";
+    std::cout << "[nexus] passed " << tests_to_run.size() - num_failed_tests << " of " << tests_to_run.size()
+              << (tests_to_run.size() == 1 ? " test" : " tests") << " in " << total_time_ms << " ms";
+    if (num_failed_tests > 0)
+        std::cout << " (" << num_failed_tests << " failed)";
     std::cout << std::endl;
-    std::cout << "[nexus] checked " << assertions << " assertions";
-    if (failed_assertions > 0)
-        std::cout << " (" << failed_assertions << " failed)";
+    std::cout << "[nexus] checked " << total_num_checks << " assertions";
+    if (total_num_failed_checks > 0)
+        std::cout << " (" << total_num_failed_checks << " failed)";
     std::cout << std::endl;
     if (tests.empty())
     {
         std::cerr << "[nexus] WARNING: no tests found/selected" << std::endl;
         return EXIT_SUCCESS;
     }
-    else if (fails > 0)
+    else if (num_failed_tests > 0)
     {
         for (auto const& t : tests)
-            if (t->hasFailed() != t->shouldFail())
+            if (t->didFail() != t->shouldFail())
             {
                 std::cerr << "[nexus] test [" << t->name() << "] failed (seed " << t->seed();
                 if (t->shouldReproduce())
@@ -268,8 +279,8 @@ int nx::Nexus::run()
                 }
                 std::cerr << ")" << std::endl;
             }
-        std::cerr << "[nexus] ERROR: " << failed_assertions << " ASSERTION" << (failed_assertions == 1 ? "" : "S") << " FAILED" << std::endl;
-        std::cerr << "[nexus] ERROR: " << fails << " TEST" << (fails == 1 ? "" : "S") << " FAILED" << std::endl;
+        std::cerr << "[nexus] ERROR: " << total_num_failed_checks << " ASSERTION" << (total_num_failed_checks == 1 ? "" : "S") << " FAILED" << std::endl;
+        std::cerr << "[nexus] ERROR: " << num_failed_tests << " TEST" << (num_failed_tests == 1 ? "" : "S") << " FAILED" << std::endl;
         return EXIT_FAILURE;
     }
     else

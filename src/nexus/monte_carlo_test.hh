@@ -39,6 +39,14 @@
     {                                                       \
         mct_class mct;                                      \
         mct.addValue("built-in rng", tg::rng());            \
+        mct.setPrinter<tg::rng>(                            \
+            [](tg::rng const& rng)                          \
+            {                                               \
+                cc::string s = "rng(";                      \
+                s += cc::to_string((void*)rng.state());     \
+                s += ")";                                   \
+                return s;                                   \
+            });                                             \
         mct.execute();                                      \
     }                                                       \
     mct_class::mct_class()

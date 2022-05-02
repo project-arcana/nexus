@@ -64,10 +64,38 @@ public:
 
     args& version(cc::string v);
 
+    template <class T>
+    args& add_positional(T& v, char metavar, cc::string desc)
+    {
+        auto& a = add_pos_arg(metavar, cc::move(desc));
+        a.register_var_parse(v);
+        return *this;
+    }
+    template <class T>
+    args& add_positional(char metavar, cc::string desc)
+    {
+        add_pos_arg(metavar, cc::move(desc));
+        return *this;
+    }
+    template <class T>
+    args& add_positional_variadic(char metavar, cc::string desc)
+    {
+        auto& a = add_pos_arg(metavar, cc::move(desc));
+        a.variadic = true;
+        return *this;
+    }
+
     // parse
 public:
-    bool parse(); ///< takes app args
+    /// takes app args
+    bool parse();
+    /// takes space-separated args
+    /// NOTE: does currently NOT respect quotes, though that will change in the future
+    bool parse(cc::string_view args);
+    /// NOTE: does NOT expect the binary filename as first arg, use parse_main for that
     bool parse(int argc, char const* const* argv);
+    /// same as parse, but ignores the first argument
+    bool parse_main(int argc, char const* const* argv);
     void print_help() const;
 
     // retrieval
@@ -92,6 +120,25 @@ public:
                         return def;
                 }
         return def;
+    }
+
+    template <class T>
+    cc::vector<T> get_all(cc::string_view name) const
+    {
+        cc::vector<T> res;
+        for (auto const& a : _parsed_args)
+            for (auto const& n : a.a->names)
+                if (n == name)
+                {
+                    T v;
+                    static_assert(!std::is_same_v<decltype(nx::detail::parse_arg(v, a.value)), nx::detail::not_supported>, //
+                                  "argument type not supported");
+
+                    // TODO: report error case?
+                    if (nx::detail::parse_arg(v, a.value))
+                        res.push_back(cc::move(v));
+                }
+        return res;
     }
 
     cc::vector<cc::string> positional_args() const;
@@ -136,6 +183,21 @@ private:
         int min_count = 0;
         char metavar = 0;
         cc::string description;
+        bool variadic = false; // only supported for the last one
+        void* target = nullptr;
+        cc::function_ptr<bool(void*, cc::string const&)> on_parse = nullptr;
+
+        template <class T>
+        void register_var_parse(T& v)
+        {
+            target = &v;
+
+            on_parse = [](void* t, cc::string const& s) -> bool {
+                T& vv = *static_cast<T*>(t);
+                static_assert(!std::is_same_v<decltype(nx::detail::parse_arg(vv, s)), nx::detail::not_supported>, "argument type not supported");
+                return nx::detail::parse_arg(vv, s);
+            };
+        }
     };
 
     struct parsed_arg

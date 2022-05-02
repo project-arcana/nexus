@@ -12,7 +12,12 @@ namespace detail
 template <class T>
 struct default_abs_epsilon
 {
-    static constexpr T value = T(0);
+    static constexpr T value = T(1e-4);
+};
+template <>
+struct default_abs_epsilon<double>
+{
+    static constexpr double value = 1e-10;
 };
 template <class T>
 struct default_rel_epsilon
@@ -86,6 +91,26 @@ struct abs_approx
     {
         return !operator==(rhs);
     }
+    template <class U>
+    bool operator>(U const& rhs) const
+    {
+        return _value > rhs || operator==(rhs);
+    }
+    template <class U>
+    bool operator>=(U const& rhs) const
+    {
+        return _value >= rhs || operator==(rhs);
+    }
+    template <class U>
+    bool operator<(U const& rhs) const
+    {
+        return _value < rhs || operator==(rhs);
+    }
+    template <class U>
+    bool operator<=(U const& rhs) const
+    {
+        return _value <= rhs || operator==(rhs);
+    }
 
 private:
     T _value;
@@ -102,6 +127,26 @@ template <class T, class U>
 bool operator!=(U const& lhs, abs_approx<T> const& rhs)
 {
     return rhs.operator!=(lhs);
+}
+template <class T, class U>
+bool operator>(U const& lhs, abs_approx<T> const& rhs)
+{
+    return rhs.operator<(lhs);
+}
+template <class T, class U>
+bool operator>=(U const& lhs, abs_approx<T> const& rhs)
+{
+    return rhs.operator<=(lhs);
+}
+template <class T, class U>
+bool operator<(U const& lhs, abs_approx<T> const& rhs)
+{
+    return rhs.operator>(lhs);
+}
+template <class T, class U>
+bool operator<=(U const& lhs, abs_approx<T> const& rhs)
+{
+    return rhs.operator>=(lhs);
 }
 
 template <class T>

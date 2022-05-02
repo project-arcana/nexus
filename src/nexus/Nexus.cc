@@ -158,7 +158,7 @@ int nx::Nexus::run()
     if (disabled_tests > 0)
         std::cout << " (" << disabled_tests << " disabled)";
     std::cout << std::endl;
-    std::cout << "[nexus] seed " << seed << std::endl;
+    std::cout << "[nexus] TEST(..., seed(" << seed << "))" << std::endl;
     std::cout << "==============================================================================" << std::endl;
     std::cout << std::setprecision(4);
     // TODO

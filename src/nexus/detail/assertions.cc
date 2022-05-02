@@ -3,7 +3,6 @@
 #include <cstdio> // TODO: replace with log
 
 #include <clean-core/assert.hh>
-#include <typed-geometry/feature/assert.hh>
 
 #ifdef NX_HAS_POLYMESH
 #include <polymesh/assert.hh>
@@ -15,7 +14,8 @@
 
 void nx::detail::overwrite_assertion_handlers()
 {
-    auto handler = [](auto const& info) {
+    auto handler = [](auto const& info)
+    {
         nx::detail::number_of_assertions()++;
         nx::detail::number_of_failed_assertions()++;
 
@@ -32,7 +32,6 @@ void nx::detail::overwrite_assertion_handlers()
         throw assertion_failed_exception();
     };
     cc::set_assertion_handler(handler);
-    tg::set_assertion_handler(handler);
 #ifdef NX_HAS_POLYMESH
     polymesh ::set_assertion_handler(handler);
 #endif
@@ -41,7 +40,6 @@ void nx::detail::overwrite_assertion_handlers()
 void nx::detail::reset_assertion_handlers()
 {
     cc::set_assertion_handler(nullptr);
-    tg::set_assertion_handler(nullptr);
 #ifdef NX_HAS_POLYMESH
     polymesh ::set_assertion_handler(nullptr);
 #endif

@@ -171,4 +171,9 @@ NX_API cc::span<char const* const> get_cmd_args();
 
 /// returns true if the current test or app was launched with the given command line argument
 NX_API bool has_cmd_arg(cc::string_view arg);
+
+/// returns the value of the given argument on the command line (or an empty string view)
+/// requires syntax like --<flag> <value>
+/// where <value> does not begin with '-'
+NX_API cc::string_view get_cmd_arg_value(cc::string_view arg);
 }

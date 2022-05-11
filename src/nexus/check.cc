@@ -3,12 +3,11 @@
 // TODO: replace with proper log
 #include <iostream>
 
-#include <nexus/detail/exception.hh>
 #include <nexus/tests/Test.hh>
 
 #include <clean-core/assert.hh>
 
-void nx::detail::report_failed_check(nx::detail::check_result const& r, const char* check, const char* file, int line, char const* function, bool terminate)
+bool nx::detail::report_failed_check(nx::detail::check_result const& r, const char* check, const char* file, int line, char const* function, bool terminate)
 {
     auto t = nx::detail::get_current_test();
     CC_ASSERT(t != nullptr && "CHECK(...) is only valid inside tests");
@@ -32,6 +31,5 @@ void nx::detail::report_failed_check(nx::detail::check_result const& r, const ch
             std::cerr << "  in function " << function << std::endl;
     }
 
-    if (terminate || nx::detail::always_terminate() || t->isDebug())
-        throw assertion_failed_exception();
+    return terminate || nx::detail::always_terminate() || t->isDebug();
 }

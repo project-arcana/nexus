@@ -8,6 +8,7 @@
 
 #include <nexus/approx.hh>
 #include <nexus/detail/api.hh>
+#include <nexus/detail/exception.hh>
 #include <nexus/detail/make_string_repr.hh>
 
 #ifndef NX_FORCE_MACRO_PREFIX
@@ -28,17 +29,18 @@
 #pragma GCC diagnostic ignored "-Wparentheses"
 #endif
 
-#define NX_IMPL_CHECK(terminate, ...)                                                                                   \
-    do                                                                                                                  \
-    {                                                                                                                   \
-        ::nx::detail::number_of_assertions()++;                                                                         \
-        ::nx::detail::check_result _nx_impl_r = ::nx::detail::start_check{} < __VA_ARGS__;                              \
-        if (!_nx_impl_r.is_true)                                                                                        \
-        {                                                                                                               \
-            CC_DEBUG_BREAK();                                                                                           \
-            ::nx::detail::number_of_failed_assertions()++;                                                              \
-            ::nx::detail::report_failed_check(_nx_impl_r, #__VA_ARGS__, __FILE__, __LINE__, CC_PRETTY_FUNC, terminate); \
-        }                                                                                                               \
+#define NX_IMPL_CHECK(terminate, ...)                                                                                  \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        ::nx::detail::number_of_assertions()++;                                                                        \
+        ::nx::detail::check_result _nx_impl_r = ::nx::detail::start_check{} < __VA_ARGS__;                             \
+        if (!_nx_impl_r.is_true)                                                                                       \
+        {                                                                                                              \
+            ::nx::detail::number_of_failed_assertions()++;                                                             \
+            ::nx::detail::report_failed_check(_nx_impl_r, #__VA_ARGS__, __FILE__, __LINE__, CC_PRETTY_FUNC, terminate) \
+                ? throw ::nx::detail::assertion_failed_exception()                                                     \
+                : void();                                                                                              \
+        }                                                                                                              \
     } while (0)
 
 #define NX_IMPL_FORBID_COMPLEX_CHAIN                                                                                                   \
@@ -164,5 +166,5 @@ struct start_check
     }
 };
 
-NX_API void report_failed_check(check_result const& r, char const* check, char const* file, int line, char const* function, bool terminate);
+NX_API bool report_failed_check(check_result const& r, char const* check, char const* file, int line, char const* function, bool terminate);
 }

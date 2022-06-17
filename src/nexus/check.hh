@@ -71,6 +71,12 @@ inline int& number_of_failed_assertions()
     return cnt;
 }
 
+struct local_check_counters
+{
+    int num_checks = 0;
+    int num_failed_checks = 0;
+};
+
 struct NX_API check_result
 {
     bool is_true = false;

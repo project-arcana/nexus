@@ -9,6 +9,11 @@
 
 namespace nx
 {
+namespace detail
+{
+struct local_check_counters;
+}
+
 /**
  * Represents a single test
  */
@@ -27,9 +32,6 @@ public:
 
     size_t seed() const { return mSeed; }
     bool isExclusive() const { return mIsExclusive; }
-    bool hasFailed() const { return mFailedAssertions > 0; }
-    int assertions() const { return mAssertions; }
-    int failedAssertions() const { return mFailedAssertions; }
     bool shouldFail() const { return mShouldFail; }
     bool isEndless() const { return mIsEndless; }
     bool shouldReproduce() const { return mReproduction.valid; }
@@ -37,6 +39,8 @@ public:
     bool isEnabled() const { return mIsEnabled; }
     bool isDebug() const { return mIsDebug; }
     bool isVerbose() const { return mIsVerbose; }
+
+    bool didFail() const { return mDidFail; }
 
     // methods
 public:
@@ -56,10 +60,12 @@ public:
         mSeedOverwritten = true;
     }
 
+    void setDidFail(bool didFail) { mDidFail = didFail; }
+
     // ctor
 public:
-    Test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun)
-      : mName(name), mFile(file), mLine(line), mFunctionName(fun_name), mFunction(fun)
+    Test(char const* name, char const* file, int line, char const* fun_name, test_fun_t fun, test_fun_before_t fun_before, test_fun_after_t fun_after, detail::local_check_counters* counters)
+      : mName(name), mFile(file), mLine(line), mFunctionName(fun_name), mFunction(fun), mFunctionBefore(fun_before), mFunctionAfter(fun_after), mCounters(counters)
     {
         CC_CONTRACT(name);
     }
@@ -71,18 +77,19 @@ public:
 
     // members
 private:
-    char const* mName;         // name of the test as given in the macro, ie. TEST("name") { .. }
-    char const* mFile;         // filename where the test is defined, directly from __FILE__ during registration
-    int mLine;                 // line where the test is declared in the file, directly from __LINE__
-    char const* mFunctionName; // macro-stringified name of the function, ie. "_nx_anon_test_function_5")
-    test_fun_t mFunction;      // function pointer to the entry
-    size_t mSeed;              // RNG seed, unintialized or user-provided if mSeedOverwritten = true
-
-    int mAssertions = 0;
-    int mFailedAssertions = 0;
+    char const* mName;                       // name of the test as given in the macro, ie. TEST("name") { .. }
+    char const* mFile;                       // filename where the test is defined, directly from __FILE__ during registration
+    int mLine;                               // line where the test is declared in the file, directly from __LINE__
+    char const* mFunctionName;               // macro-stringified name of the function, ie. "_nx_anon_test_function_5")
+    test_fun_t mFunction;                    // function pointer to the entry
+    test_fun_before_t mFunctionBefore;       //
+    test_fun_after_t mFunctionAfter;         //
+    detail::local_check_counters* mCounters; //
+    size_t mSeed;                            // RNG seed, unintialized or user-provided if mSeedOverwritten = true
 
     bool mIsExclusive = false;
     bool mShouldFail = false;
+    bool mDidFail = false;
     bool mSeedOverwritten = false;
     bool mIsEndless = false;
     bool mIsEnabled = true;

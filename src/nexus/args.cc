@@ -37,6 +37,13 @@ args& args::version(cc::string v)
     return *this;
 }
 
+args& args::validate(cc::string_view desc, cc::unique_function<bool()> validate_fun)
+{
+    CC_ASSERT(validate_fun.is_valid());
+    _validators.push_back({desc, cc::move(validate_fun)});
+    return *this;
+}
+
 bool args::parse()
 {
     if (auto a = nx::detail::get_current_app())
@@ -68,7 +75,8 @@ bool args::parse(int argc, char const* const* argv)
     parsed_arg* valarg = nullptr;
     auto show_help = false;
 
-    auto const add_pos_arg = [&](cc::string_view s) {
+    auto const add_pos_arg = [&](cc::string_view s)
+    {
         // if variadic, just append last one
         if (!_pos_args.empty() && _parsed_pos_args.size() == _pos_args.size() && _pos_args.back().variadic)
         {
@@ -85,7 +93,8 @@ bool args::parse(int argc, char const* const* argv)
         return true;
     };
 
-    auto const add_long_arg = [&](cc::string_view s) {
+    auto const add_long_arg = [&](cc::string_view s)
+    {
         if (!_disable_help && s == "help")
         {
             show_help = true;
@@ -128,7 +137,8 @@ bool args::parse(int argc, char const* const* argv)
         return false;
     };
 
-    auto const add_short_args = [&](cc::string_view s) {
+    auto const add_short_args = [&](cc::string_view s)
+    {
         for (size_t i = 0; i < s.size(); ++i)
         {
             auto c = s.subview(i, 1);
@@ -265,6 +275,16 @@ bool args::parse(int argc, char const* const* argv)
             CC_ASSERT(a.values.size() == 1 && "variadic pos auto-parse not supported yet");
             if (!a.a->on_parse(a.a->target, a.values[0]))
                 return false;
+        }
+    }
+
+    // validation
+    for (auto const& v : _validators)
+    {
+        if (!v.fun())
+        {
+            std::cerr << "validation failed: " << v.desc.c_str() << std::endl;
+            return false;
         }
     }
 
@@ -456,6 +476,14 @@ void args::print_help() const
         {
             std::cout << "  " << a.c_str() << cc::string::filled(g.max_arg_length - a.size() + 2, ' ').c_str() << d.c_str() << std::endl;
         }
+    }
+
+    if (!_validators.empty())
+    {
+        std::cout << std::endl;
+        std::cout << "[preconditions]" << std::endl;
+        for (auto const& v : _validators)
+            std::cout << "  - " << v.desc.c_str() << std::endl;
     }
 
     std::cout << std::endl;

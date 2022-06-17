@@ -4,6 +4,7 @@
 #include <clean-core/span.hh>
 #include <clean-core/string.hh>
 #include <clean-core/string_view.hh>
+#include <clean-core/unique_function.hh>
 #include <clean-core/vector.hh>
 
 #include <nexus/detail/api.hh>
@@ -27,6 +28,11 @@ struct NX_API args
 public:
     args();
     args(cc::string app_name, cc::string app_desc = "");
+
+    args(args&&) = default;
+    args(args const&) = delete;
+    args& operator=(args&&) = default;
+    args& operator=(args const&) = delete;
 
     args& disable_help();
 
@@ -84,6 +90,28 @@ public:
         a.variadic = true;
         return *this;
     }
+
+    /// adds a function to be called at the end of parsing to validate an arbitrary property
+    /// if validate_fun returns false, desc is printed and parsing returns false
+    ///
+    /// usage example:
+    ///
+    ///   int i, j;
+    ///   auto args = nx::args(...);
+    ///   args.add(i, ...) //
+    ///       .add(j, ...)
+    ///       ...
+    ///       .validate("i and j must have same sign", [&] { return i * j > 0; });
+    ///
+    ///   if (!args.parse(...))
+    ///   {
+    ///       args.print_help();
+    ///       return;
+    ///   }
+    ///
+    ///   CC_ASSERT(i * j > 0); // will never fail here
+    ///
+    args& validate(cc::string_view desc, cc::unique_function<bool()> validate_fun);
 
     // parse
 public:
@@ -161,7 +189,8 @@ private:
             if constexpr (std::is_same_v<T, bool>)
             {
                 expect_val = false;
-                on_parse = [](void* t, cc::string const&) -> bool {
+                on_parse = [](void* t, cc::string const&) -> bool
+                {
                     *static_cast<bool*>(t) = true;
                     return true;
                 };
@@ -169,7 +198,8 @@ private:
             else
             {
                 expect_val = true;
-                on_parse = [](void* t, cc::string const& s) -> bool {
+                on_parse = [](void* t, cc::string const& s) -> bool
+                {
                     T& vv = *static_cast<T*>(t);
                     static_assert(!std::is_same_v<decltype(nx::detail::parse_arg(vv, s)), nx::detail::not_supported>, "argument type not supported");
                     return nx::detail::parse_arg(vv, s);
@@ -192,7 +222,8 @@ private:
         {
             target = &v;
 
-            on_parse = [](void* t, cc::string const& s) -> bool {
+            on_parse = [](void* t, cc::string const& s) -> bool
+            {
                 T& vv = *static_cast<T*>(t);
                 static_assert(!std::is_same_v<decltype(nx::detail::parse_arg(vv, s)), nx::detail::not_supported>, "argument type not supported");
                 return nx::detail::parse_arg(vv, s);
@@ -212,6 +243,12 @@ private:
         cc::vector<cc::string> values;
     };
 
+    struct validator
+    {
+        cc::string desc;
+        cc::unique_function<bool()> fun;
+    };
+
     arg& add_arg(std::initializer_list<cc::string> names, cc::string desc);
     pos_arg& add_pos_arg(char n, cc::string desc);
 
@@ -226,6 +263,8 @@ private:
 
     cc::vector<parsed_arg> _parsed_args;
     cc::vector<parsed_pos_arg> _parsed_pos_args;
+
+    cc::vector<validator> _validators;
 };
 
 /// returns all command line arguments of the currently running test or app

@@ -181,7 +181,7 @@ int nx::Nexus::run()
         // execute and measure
         auto const start_thread = std::this_thread::get_id();
         auto const start = std::chrono::high_resolution_clock::now();
-        if (t->isDebug())
+        if (t->isDebug() || t->shouldReproduce())
             t->function()();
         else
         {

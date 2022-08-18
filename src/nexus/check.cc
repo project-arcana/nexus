@@ -31,5 +31,5 @@ bool nx::detail::report_failed_check(nx::detail::check_result const& r, const ch
             std::cerr << "  in function " << function << std::endl;
     }
 
-    return terminate || nx::detail::always_terminate() || t->isDebug();
+    return terminate || nx::detail::always_terminate() || t->isDebug() || t->shouldReproduce();
 }

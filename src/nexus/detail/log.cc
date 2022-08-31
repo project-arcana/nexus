@@ -1,3 +1,6 @@
 #include "log.hh"
 
-RICH_LOG_DEFINE_DOMAIN(Nexus);
+namespace nx
+{
+RICH_LOG_DEFINE_DEFAULT_DOMAIN("nexus");
+}

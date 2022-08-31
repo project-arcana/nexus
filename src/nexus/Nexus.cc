@@ -70,15 +70,15 @@ int nx::Nexus::run()
 
     if (mPrintHelp)
     {
-        LOGD(Nexus, Info, "version %s", version);
-        LOGD(Nexus, Info, "");
-        LOGD(Nexus, Info, "usage:");
-        LOGD(Nexus, Info, R"(  --help        shows this help)");
-        LOGD(Nexus, Info, R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
-        LOGD(Nexus, Info, "");
-        LOGD(Nexus, Info, "stats:");
-        LOGD(Nexus, Info, " - found %s tests", detail::get_all_tests().size());
-        LOGD(Nexus, Info, " - found %s apps", detail::get_all_apps().size());
+        LOG("version %s", version);
+        LOG("");
+        LOG("usage:");
+        LOG(R"(  --help        shows this help)");
+        LOG(R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
+        LOG("");
+        LOG("stats:");
+        LOG(" - found %s tests", detail::get_all_tests().size());
+        LOG(" - found %s apps", detail::get_all_apps().size());
 
         return EXIT_SUCCESS;
     }
@@ -149,13 +149,13 @@ int nx::Nexus::run()
         tests_to_run.push_back(t.get());
     }
 
-    LOGD(Nexus, Info, "version %s", version);
-    LOGD(Nexus, Info, "run with '--help' for options");
-    LOGD(Nexus, Info, "detected %s %s", tests.size(), tests.size() == 1 ? "test" : "tests");
-    LOGD(Nexus, Info, "running %s %s%s", tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests",
+    LOG("version %s", version);
+    LOG("run with '--help' for options");
+    LOG("detected %s %s", tests.size(), tests.size() == 1 ? "test" : "tests");
+    LOG("running %s %s%s", tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests",
          disabled_tests == 0 ? "" : cc::format(" (%s disabled)", disabled_tests));
-    LOGD(Nexus, Info, "TEST(..., seed(%s))", seed);
-    LOGD(Nexus, Info, "==============================================================================");
+    LOG("TEST(..., seed(%s))", seed);
+    LOG("==============================================================================");
 
     // execute tests
     // TODO: timings and statistics and so on
@@ -198,7 +198,7 @@ int nx::Nexus::run()
             if (!t->hasFailed())
             {
                 fails++;
-                LOGD(Nexus, Warning, "Test [%s] should have failed but didn't.\n  in %s:%s", t->name(), t->file(), t->line());
+                LOG_WARN("Test [%s] should have failed but didn't.\n  in %s:%s", t->name(), t->file(), t->line());
             }
         }
         else
@@ -220,17 +220,17 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-        LOGD(Nexus, Info, "  %<60s ... %6d checks in %.4f ms", t->name(), t->mAssertions, test_time_ms);
+        LOG("  %<60s ... %6d checks in %.4f ms", t->name(), t->mAssertions, test_time_ms);
     }
 
-    LOGD(Nexus, Info, "==============================================================================");
-    LOGD(Nexus, Info, "passed %d of %d %s in %.4f ms%s", //
+    LOG("==============================================================================");
+    LOG("passed %d of %d %s in %.4f ms%s", //
          tests_to_run.size() - fails, tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests", total_time_ms,
          fails == 0 ? "" : cc::format(" (%d failed)", fails));
-    LOGD(Nexus, Info, "checked %d assertions%s", assertions, failed_assertions == 0 ? "" : cc::format(" (%d failed)", failed_assertions));
+    LOG("checked %d assertions%s", assertions, failed_assertions == 0 ? "" : cc::format(" (%d failed)", failed_assertions));
     if (tests.empty())
     {
-        LOGD(Nexus, Warning, "no tests found/selected");
+        LOG_WARN("no tests found/selected");
         return EXIT_SUCCESS;
     }
     else if (fails > 0)
@@ -252,15 +252,15 @@ int nx::Nexus::run()
                     }
                     repr += "))";
                 }
-                LOGD(Nexus, Warning, "test [%s] failed (seed %d%s)", t->name(), t->seed(), repr);
+                LOG_WARN("test [%s] failed (seed %d%s)", t->name(), t->seed(), repr);
             }
-        LOGD(Nexus, Warning, "%d %s failed", failed_assertions, failed_assertions == 1 ? "ASSERTION" : "ASSERTIONS");
-        LOGD(Nexus, Warning, "%d %s failed", fails, fails == 1 ? "TEST" : "TESTS");
+        LOG_WARN("%d %s failed", failed_assertions, failed_assertions == 1 ? "ASSERTION" : "ASSERTIONS");
+        LOG_WARN("%d %s failed", fails, fails == 1 ? "TEST" : "TESTS");
         return EXIT_FAILURE;
     }
     else
     {
-        LOGD(Nexus, Info, "success.");
+        LOG("success.");
         if (!empty_tests.empty())
         {
             cc::string warn_log;
@@ -273,7 +273,7 @@ int nx::Nexus::run()
                 cc::format_to(warn_log, "    in %s:%s\n", t->file(), t->line());
             }
             warn_log.pop_back();
-            LOGD(Nexus, Warning, "%s", warn_log);
+            LOG_WARN("%s", warn_log);
         }
 
         return EXIT_SUCCESS;

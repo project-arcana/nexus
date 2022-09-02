@@ -18,6 +18,7 @@
 
 #include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
+#include <nexus/detail/log.hh>
 #include <nexus/detail/trace_serialize.hh>
 #include <nexus/minimize_options.hh>
 #include <nexus/test.hh>
@@ -142,15 +143,15 @@ struct nx::MonteCarloTest::machine
                 if (f_a->return_type == e.type_a)
                 {
                     if (f_b->return_type != e.type_b)
-                        LOG_ERROR("bisimulation return type mismatch for '{}': expected {}, got {}", f_a->name, cc::demangle(e.type_b.name()),
-                                  cc::demangle(f_b->return_type.name()));
+                        LOG_ERROR("bisimulation return type mismatch for '{}': expected {}, got {}", f_a->name,
+                             cc::demangle(e.type_b.name()), cc::demangle(f_b->return_type.name()));
                     CC_ASSERT(f_b->return_type == e.type_b);
                 }
                 else
                 {
                     if (f_a->return_type != f_b->return_type)
                         LOG_ERROR("bisimulation return type mismatch for '{}': {} vs {}", f_a->name, cc::demangle(f_a->return_type.name()),
-                                  cc::demangle(f_b->return_type.name()));
+                             cc::demangle(f_b->return_type.name()));
                     CC_ASSERT(f_a->return_type == f_b->return_type);
                 }
 
@@ -513,7 +514,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
 
     // pre callbacks
     if (verbose)
-        LOG_INFO(" .. executing pre-callbacks ({})", mPreCallbacks.size());
+        LOG(" .. executing pre-callbacks ({})", mPreCallbacks.size());
     for (auto& f : mPreCallbacks)
         f();
 
@@ -521,7 +522,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
     CC_DEFER
     {
         if (verbose)
-            LOG_INFO(" .. executing post-callbacks ({})", mPreCallbacks.size());
+            LOG(" .. executing post-callbacks ({})", mPreCallbacks.size());
         for (auto& f : mPostCallbacks)
             f();
     };
@@ -532,7 +533,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
         CC_ASSERT(f->arity() == int(arg_indices.size()));
 
         if (verbose)
-            LOG_INFO(" .. execute [{}]", f->name);
+            LOG(" .. execute [{}]", f->name);
 
         machine_trace::op op;
         op.function_idx = f->internal_idx;
@@ -1090,7 +1091,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
 
 void nx::MonteCarloTest::printSetup()
 {
-    LOG_INFO("registered functions:");
+    LOG("registered functions:");
     for (auto const& f : mFunctions)
     {
         cc::string s;
@@ -1106,7 +1107,7 @@ void nx::MonteCarloTest::printSetup()
         s += f.return_type.name();
         if (f.is_invariant)
             s += " [INVARIANT]";
-        LOG_INFO("  {}", s);
+        LOG("  {}", s);
     }
 }
 

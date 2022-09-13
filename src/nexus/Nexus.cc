@@ -253,6 +253,7 @@ int nx::Nexus::run()
                     repr += "))";
                 }
                 LOG_WARN("test [%s] failed (seed %d%s)", t->name(), t->seed(), repr);
+                LOG_WARN("  %s:%s", t->file(), t->line());
             }
         LOG_WARN("%d %s failed", failed_assertions, failed_assertions == 1 ? "ASSERTION" : "ASSERTIONS");
         LOG_WARN("%d %s failed", fails, fails == 1 ? "TEST" : "TESTS");

@@ -517,4 +517,29 @@ bool has_cmd_arg(cc::string_view arg)
     return false;
 }
 
+cc::string_view get_cmd_arg_value(cc::string_view arg)
+{
+    auto const curr_cmd_args = get_cmd_args();
+    int const argc = int(curr_cmd_args.size());
+    char const* const* argv = curr_cmd_args.data();
+
+    // only iterate to the (n - 1)th arg
+    for (auto i = 0; i < argc - 1; ++i)
+    {
+        if (!arg.equals(argv[i]))
+            continue; // flag does not match
+
+        char const* next_arg = argv[i + 1];
+
+        if (!next_arg || next_arg[0] == '\0' || next_arg[0] == '-')
+        {
+            // the flag exists but its next argument is empty or starts with a dash as well
+            return {};
+        }
+
+        return cc::string_view(next_arg);
+    }
+
+    return {};
+}
 }

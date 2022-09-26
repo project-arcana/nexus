@@ -21,9 +21,9 @@ void nx::detail::configure(Test* t, exclusive_t const&) { t->setExclusive(); }
 
 void nx::detail::configure(Test* t, should_fail_t const&) { t->setShouldFail(); }
 
-Test* detail::register_test(const char* name, const char* file, int line, char const* fun_name, test_fun_t fun)
+Test* detail::register_test(const char* name, const char* file, int line, char const* fun_name, test_fun_t fun, test_fun_before_t fun_before, test_fun_after_t fun_after, local_check_counters* counters)
 {
-    auto t = cc::make_unique<Test>(name, file, line, fun_name, fun);
+    auto t = cc::make_unique<Test>(name, file, line, fun_name, fun, fun_before, fun_after, counters);
     auto t_ptr = t.get();
     get_all_tests().push_back(std::move(t));
     return t_ptr;

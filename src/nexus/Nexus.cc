@@ -153,24 +153,25 @@ int nx::Nexus::run()
     LOG("run with '--help' for options");
     LOG("detected %s %s", tests.size(), tests.size() == 1 ? "test" : "tests");
     LOG("running %s %s%s", tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests",
-         disabled_tests == 0 ? "" : cc::format(" (%s disabled)", disabled_tests));
+        disabled_tests == 0 ? "" : cc::format(" (%s disabled)", disabled_tests));
     LOG("TEST(..., seed(%s))", seed);
     LOG("==============================================================================");
 
     // execute tests
     // TODO: timings and statistics and so on
     auto total_time_ms = 0.0;
-    auto fails = 0;
-    auto assertions = 0;
-    auto failed_assertions = 0;
-    for (auto t : tests_to_run)
+    auto num_failed_tests = 0;
+    auto total_num_checks = 0;
+    auto total_num_failed_checks = 0;
+
+    for (auto* t : tests_to_run)
     {
         // prepare
-        detail::number_of_assertions() = 0;
-        detail::number_of_failed_assertions() = 0;
         curr_test() = t;
         detail::is_silenced() = t->mShouldFail;
         detail::always_terminate() = false;
+
+        t->mFunctionBefore();
 
         // execute and measure
         auto const start = std::chrono::high_resolution_clock::now();
@@ -189,26 +190,36 @@ int nx::Nexus::run()
         }
         auto const end = std::chrono::high_resolution_clock::now();
 
+        t->mFunctionAfter(t->mCounters);
+
         // report
         curr_test() = nullptr;
-        t->mAssertions = detail::number_of_assertions();
-        t->mFailedAssertions = detail::number_of_failed_assertions();
+
+        auto const num_checks = t->mCounters->num_checks;
+        auto const num_failed_checks = t->mCounters->num_failed_checks;
+
+        total_num_checks += num_checks;
+
+        t->setDidFail(num_failed_checks > 0);
+
         if (t->mShouldFail)
         {
-            if (!t->hasFailed())
+            if (!t->didFail())
             {
-                fails++;
+                num_failed_tests++;
                 LOG_WARN("Test [%s] should have failed but didn't.\n  in %s:%s", t->name(), t->file(), t->line());
             }
         }
         else
         {
-            if (t->hasFailed())
-                fails++;
-            failed_assertions += t->mFailedAssertions;
+            if (t->didFail())
+                num_failed_tests++;
+
+            total_num_failed_checks += num_failed_checks;
         }
-        assertions += t->mAssertions;
-        if (t->mAssertions == 0)
+
+
+        if (num_checks == 0)
             empty_tests.push_back(t);
 
         // reset
@@ -220,23 +231,24 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-        LOG("  %<60s ... %6d checks in %.4f ms", t->name(), t->mAssertions, test_time_ms);
+        LOG("  %<60s ... %6d checks in %.4f ms", t->name(), num_checks, test_time_ms);
     }
 
     LOG("==============================================================================");
     LOG("passed %d of %d %s in %.4f ms%s", //
-         tests_to_run.size() - fails, tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests", total_time_ms,
-         fails == 0 ? "" : cc::format(" (%d failed)", fails));
-    LOG("checked %d assertions%s", assertions, failed_assertions == 0 ? "" : cc::format(" (%d failed)", failed_assertions));
+        tests_to_run.size() - num_failed_tests, tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests", total_time_ms,
+        num_failed_tests == 0 ? "" : cc::format(" (%d failed)", num_failed_tests));
+    LOG("checked %d assertions%s", total_num_checks, total_num_failed_checks == 0 ? "" : cc::format(" (%d failed)", total_num_failed_checks));
+
     if (tests.empty())
     {
         LOG_WARN("no tests found/selected");
         return EXIT_SUCCESS;
     }
-    else if (fails > 0)
+    else if (num_failed_tests > 0)
     {
         for (auto const& t : tests)
-            if (t->hasFailed() != t->shouldFail())
+            if (t->didFail() != t->shouldFail())
             {
                 cc::string repr;
                 if (t->shouldReproduce())
@@ -255,8 +267,9 @@ int nx::Nexus::run()
                 LOG_WARN("test [%s] failed (seed %d%s)", t->name(), t->seed(), repr);
                 LOG_WARN("  %s:%s", t->file(), t->line());
             }
-        LOG_WARN("%d %s failed", failed_assertions, failed_assertions == 1 ? "ASSERTION" : "ASSERTIONS");
-        LOG_WARN("%d %s failed", fails, fails == 1 ? "TEST" : "TESTS");
+        LOG_WARN("%d %s failed", total_num_failed_checks, total_num_failed_checks == 1 ? "ASSERTION" : "ASSERTIONS");
+        LOG_WARN("%d %s failed", num_failed_tests, num_failed_tests == 1 ? "TEST" : "TESTS");
+
         return EXIT_FAILURE;
     }
     else

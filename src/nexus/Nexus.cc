@@ -270,6 +270,7 @@ int nx::Nexus::run()
 
         LOG_WARN("%d %s failed", total_num_failed_checks, total_num_failed_checks == 1 ? "ASSERTION" : "ASSERTIONS");
         LOG_WARN("%d %s failed", num_failed_tests, num_failed_tests == 1 ? "TEST" : "TESTS");
+
         return EXIT_FAILURE;
     }
     else

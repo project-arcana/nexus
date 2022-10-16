@@ -60,6 +60,8 @@ private:
     size_t _size;
 };
 
+// C++20's rewrite rules makes this ambiguous
+#if __cplusplus < 202002L
 template <class Range, class T>
 bool operator==(Range const& lhs, range<T> const& rhs)
 {
@@ -70,4 +72,5 @@ bool operator!=(Range const& lhs, range<T> const& rhs)
 {
     return rhs.operator!=(lhs);
 }
+#endif
 }

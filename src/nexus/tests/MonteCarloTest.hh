@@ -329,6 +329,7 @@ private:
             int function_idx = -1;
             int args_start_idx = -1;
             int return_value_idx = -1;
+            int seed = -1;
             function* fun = nullptr;
         };
 

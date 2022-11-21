@@ -25,6 +25,18 @@
 #include <nexus/tests/Test.hh>
 
 #include <cstdio>
+#include <typeindex>
+
+namespace
+{
+bool has_rng_arg(cc::span<std::type_index const> types)
+{
+    for (auto ti : types)
+        if (ti == typeid(tg::rng))
+            return true;
+    return false;
+}
+}
 
 struct nx::MonteCarloTest::machine
 {
@@ -143,15 +155,15 @@ struct nx::MonteCarloTest::machine
                 if (f_a->return_type == e.type_a)
                 {
                     if (f_b->return_type != e.type_b)
-                        LOG_ERROR("bisimulation return type mismatch for '{}': expected {}, got {}", f_a->name,
-                             cc::demangle(e.type_b.name()), cc::demangle(f_b->return_type.name()));
+                        LOG_ERROR("bisimulation return type mismatch for '{}': expected {}, got {}", f_a->name, cc::demangle(e.type_b.name()),
+                                  cc::demangle(f_b->return_type.name()));
                     CC_ASSERT(f_b->return_type == e.type_b);
                 }
                 else
                 {
                     if (f_a->return_type != f_b->return_type)
                         LOG_ERROR("bisimulation return type mismatch for '{}': {} vs {}", f_a->name, cc::demangle(f_a->return_type.name()),
-                             cc::demangle(f_b->return_type.name()));
+                                  cc::demangle(f_b->return_type.name()));
                     CC_ASSERT(f_a->return_type == f_b->return_type);
                 }
 
@@ -345,9 +357,14 @@ struct nx::MonteCarloTest::machine
         return max_tries >= 0;
     }
 
-    value execute(function* f, cc::span<value*> args, bool exec_invariants = true)
+    value execute(function* f, cc::span<value*> args, bool exec_invariants, int seed)
     {
         CC_ASSERT(int(args.size()) == f->arity());
+
+        // set to proper seed
+        for (auto a : args)
+            if (a->type == typeid(tg::rng))
+                ((tg::rng*)a->ptr)->seed(seed);
 
         auto v = f->execute(args);
         f->executions++;
@@ -528,14 +545,18 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
     };
 
     // helper
-    auto const add_trace = [&trace, verbose](function* f, int vi, cc::span<int> arg_indices)
+    auto const add_trace = [&trace, verbose](function* f, int vi, cc::span<int> arg_indices, int seed)
     {
         CC_ASSERT(f->arity() == int(arg_indices.size()));
 
         if (verbose)
             LOG(" .. execute [{}]", f->name);
 
+        if (!has_rng_arg(f->arg_types))
+            seed = -1; // less verbose trace
+
         machine_trace::op op;
+        op.seed = seed;
         op.function_idx = f->internal_idx;
         op.fun = f;
         op.args_start_idx = int(trace.arg_indices.size());
@@ -570,6 +591,8 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
                 break;
             }
 
+            auto const seed = uniform(rng, 0, 9999);
+
             // get function ot test
             auto f = m.sample_suitable_test_function(rng);
             if (f == nullptr)
@@ -588,10 +611,10 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
 
                     // add trace
                     auto vi = m.generate_integrated_value_idx(rng, ff->return_type);
-                    add_trace(ff, vi, cc::span<int>(index_buffer.data(), ff->arity()));
+                    add_trace(ff, vi, cc::span<int>(index_buffer.data(), ff->arity()), seed);
 
                     // execute
-                    auto v = m.execute(ff, args);
+                    auto v = m.execute(ff, args, true, seed);
                     m.integrate_value(cc::move(v), vi);
                 }
 
@@ -601,10 +624,10 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
 
             // add trace
             auto vi = m.generate_integrated_value_idx(rng, f->return_type);
-            add_trace(f, vi, arg_indices);
+            add_trace(f, vi, arg_indices, seed);
 
             // execute function
-            auto v = m.execute(f, args);
+            auto v = m.execute(f, args, true, seed);
             m.integrate_value(cc::move(v), vi);
             unsuccessful_count = 0;
 
@@ -657,12 +680,14 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
                 CC_ASSERT(f_a->arity() == int(args_a.size()));
                 CC_ASSERT(f_b->arity() == int(args_b.size()));
 
+                auto const seed = uniform(rng, 0, 9999);
+
                 // add trace
                 auto vi = m_a.generate_integrated_value_idx(rng, f_a->return_type);
-                add_trace(f_a, vi, arg_indices);
+                add_trace(f_a, vi, arg_indices, seed);
 
-                auto va = m_a.execute(f_a, args_a);
-                auto vb = m_b.execute(f_b, args_b);
+                auto va = m_a.execute(f_a, args_a, true, seed);
+                auto vb = m_b.execute(f_b, args_b, true, seed);
 
                 // test equivalence
                 if (va.type == e.type_a)
@@ -969,7 +994,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                 return false; // precondition violated, i.e. invalid trace
 
             // execute function (no invariants)
-            auto v = m.execute(f, args, false);
+            auto v = m.execute(f, args, false, op.seed);
 
             // print outputs
             if (print_mode)
@@ -1032,8 +1057,8 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                 return false; // precondition violated, i.e. invalid trace
 
             // execute function
-            auto va = m_a.execute(f_a, args_a, false);
-            auto vb = m_b.execute(f_b, args_b, false);
+            auto va = m_a.execute(f_a, args_a, false, op.seed);
+            auto vb = m_b.execute(f_b, args_b, false, op.seed);
 
             // print outputs
             if (print_mode)
@@ -1351,6 +1376,7 @@ void nx::MonteCarloTest::reproduceTrace(cc::span<int const> serialized_trace)
         while (pos < int(serialized_trace.size()))
         {
             auto& op = trace.ops.emplace_back();
+            op.seed = get_int();
             op.function_idx = get_int();
             op.fun = funs[op.function_idx];
             op.return_value_idx = get_int();
@@ -1386,6 +1412,7 @@ cc::string nx::MonteCarloTest::machine_trace::serialize_to_string(MonteCarloTest
     // serialize ops
     for (auto const& op : ops)
     {
+        trace.push_back(op.seed);
         trace.push_back(op.function_idx);
         trace.push_back(op.return_value_idx);
         trace.push_back(op.fun->arity());

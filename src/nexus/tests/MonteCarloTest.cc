@@ -474,7 +474,6 @@ void nx::MonteCarloTest::execute()
     auto test = nx::detail::get_current_test();
 
     CC_ASSERT(!test->shouldFail() && "should-fail tests not supported for MCT");
-    CC_ASSERT(!test->isEndless() && "endless mode not YET supported for MCT");
 
     // reproduce trace
     if (test->shouldReproduce())
@@ -488,7 +487,7 @@ void nx::MonteCarloTest::execute()
 
     if (test->isDebug())
     {
-        tryExecuteMachineNormally(trace);
+        tryExecuteMachineNormally(trace, get_seed());
         return;
     }
 
@@ -500,7 +499,20 @@ void nx::MonteCarloTest::execute()
     // first: try normal execution
     try
     {
-        tryExecuteMachineNormally(trace);
+        if (test->isEndless()) // endless exec
+        {
+            tg::rng seed_rng;
+            seed_rng.seed(get_seed());
+            while (true)
+            {
+                trace = {};
+                tryExecuteMachineNormally(trace, seed_rng());
+            }
+        }
+        else // single execution
+        {
+            tryExecuteMachineNormally(trace, get_seed());
+        }
     }
     catch (nx::detail::assertion_failed_exception const&)
     {
@@ -525,7 +537,7 @@ void nx::MonteCarloTest::execute()
     nx::detail::reset_assertion_handlers();
 }
 
-void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
+void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace, size_t seed)
 {
     auto verbose = detail::get_current_test()->isVerbose();
 
@@ -570,7 +582,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
     if (mEquivalences.empty())
     {
         tg::rng rng;
-        rng.seed(get_seed());
+        rng.seed(seed);
         trace.start(nullptr);
 
         // build machine
@@ -642,7 +654,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
         {
             // seed rng
             tg::rng rng;
-            rng.seed(get_seed());
+            rng.seed(seed);
             trace.start(&e);
 
             // prepare machines
@@ -965,9 +977,6 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     // normal mode: no equivalence checking
     if (trace.equiv == nullptr)
     {
-        tg::rng rng;
-        rng.seed(get_seed());
-
         // build machine
         auto m = machine::build(*this, mFunctions);
 
@@ -1010,10 +1019,6 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     else // equivalence checker
     {
         auto const& e = *trace.equiv;
-
-        // seed rng
-        tg::rng rng;
-        rng.seed(get_seed());
 
         // prepare machines
         cc::vector<function*> funs_a;

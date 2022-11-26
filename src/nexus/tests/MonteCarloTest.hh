@@ -91,7 +91,7 @@ public:
 
     // impls
 private:
-    void tryExecuteMachineNormally(machine_trace& trace);
+    void tryExecuteMachineNormally(machine_trace& trace, size_t seed);
 
     void minimizeTrace(machine_trace& trace);
     void reproduceTrace(cc::span<int const> serialized_trace);

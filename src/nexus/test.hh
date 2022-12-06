@@ -71,6 +71,14 @@ namespace nx
 /// NOTE: only valid inside a test!
 NX_API size_t get_seed();
 
+/// true iff the current test is in debug mode
+/// NOTE: only valid inside a test!
+NX_API bool is_current_test_debug();
+
+/// true iff the current test is in reproduction mode
+/// NOTE: only valid inside a test!
+NX_API bool is_current_test_reproduction();
+
 namespace detail
 {
 NX_API Test* register_test(

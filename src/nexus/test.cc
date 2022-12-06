@@ -38,6 +38,20 @@ size_t nx::get_seed()
     return t->seed();
 }
 
+bool nx::is_current_test_debug()
+{
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t && "no active test");
+    return t->isDebug();
+}
+
+bool nx::is_current_test_reproduction()
+{
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t && "no active test");
+    return t->shouldReproduce();
+}
+
 void detail::configure(Test* t, const endless_t&) { t->setEndless(); }
 
 void detail::configure(Test* t, const reproduce& r) { t->setReproduce(r); }

@@ -83,6 +83,8 @@ public:
         mTypeMetadata[std::type_index(typeid(T))].to_string = [f = cc::move(f)](void* p) { return f(*static_cast<T const*>(p)); };
     }
 
+    MonteCarloTest();
+
     // execution
 public:
     void execute();
@@ -413,5 +415,9 @@ private:
     cc::vector<cc::unique_function<void()>> mPreCallbacks;
     cc::vector<cc::unique_function<void()>> mPostCallbacks;
     cc::vector<equivalence> mEquivalences;
+
+    machine_trace* mCurrentTrace = nullptr;
+
+    friend class Test;
 };
 }

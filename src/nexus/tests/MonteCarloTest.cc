@@ -467,9 +467,18 @@ void nx::MonteCarloTest::addPostSessionCallback(cc::unique_function<void()> f)
     mPostCallbacks.emplace_back(cc::move(f));
 }
 
+nx::MonteCarloTest::MonteCarloTest()
+{
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t != nullptr && "only creatable during tests");
+    t->setMonteCarloTest(this);
+}
+
 void nx::MonteCarloTest::execute()
 {
     machine_trace trace;
+    mCurrentTrace = &trace;
+    CC_DEFER { mCurrentTrace = nullptr; };
 
     auto test = nx::detail::get_current_test();
 

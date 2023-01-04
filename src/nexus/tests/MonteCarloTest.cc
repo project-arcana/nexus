@@ -1,5 +1,7 @@
 #include "MonteCarloTest.hh"
 
+#include <chrono>
+
 #include <rich-log/log.hh>
 
 #include <clean-core/array.hh>
@@ -488,7 +490,7 @@ void nx::MonteCarloTest::execute()
     if (test->shouldReproduce())
     {
         CC_ASSERT(!test->reproduction().trace.empty() && "MCT needs a string reproduce (trace)");
-        LOG_ERROR("[nexus] replaying MCT trace '{}'", test->reproduction().trace);
+        LOG_ERROR("replaying MCT trace '{}'", test->reproduction().trace);
         auto trace = nx::detail::trace_decode(test->reproduction().trace);
         reproduceTrace(trace);
         return;
@@ -510,12 +512,25 @@ void nx::MonteCarloTest::execute()
     {
         if (test->isEndless()) // endless exec
         {
+            LOG("endless MONTE_CARLO_TEST(\"%s\")", test->name());
+
+            auto assert_cnt_start = nx::detail::number_of_assertions();
+            auto t0 = std::chrono::high_resolution_clock::now();
             tg::rng seed_rng;
             seed_rng.seed(get_seed());
             while (true)
             {
                 trace = {};
                 tryExecuteMachineNormally(trace, seed_rng());
+
+                // progress report
+                auto t1 = std::chrono::high_resolution_clock::now();
+                using namespace std::chrono_literals;
+                if (t1 - t0 > 1000ms)
+                {
+                    t0 = t1;
+                    LOG("endless MONTE_CARLO_TEST: %s assertions", nx::detail::number_of_assertions() - assert_cnt_start);
+                }
             }
         }
         else // single execution
@@ -526,9 +541,9 @@ void nx::MonteCarloTest::execute()
     catch (nx::detail::assertion_failed_exception const&)
     {
         // on fail: try to minimize trace
-        LOG_ERROR("[nexus] MONTE_CARLO_TEST failed. Trying to generate minimal reproduction.");
+        LOG_ERROR("MONTE_CARLO_TEST failed. Trying to generate minimal reproduction.");
         minimizeTrace(trace);
-        LOG_ERROR("[nexus] .. done. result:");
+        LOG_ERROR(".. done. result:");
 
         // set reproduction BEFORE actually executing it
         test->setReproduce(reproduce(trace.serialize_to_string(*this)));
@@ -816,7 +831,7 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
 
     while (found_smaller) // TODO: time limit
     {
-        LOG_ERROR("[nexus]   .. trace complexity {}", trace.complexity());
+        LOG_ERROR("  .. trace complexity {}", trace.complexity());
         auto opts = trace.build_minimizer();
 
         found_smaller = false;
@@ -844,16 +859,16 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
 bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode)
 {
     if (print_mode)
-        LOG_ERROR("[nexus] =============== TRACE BEGIN ===============");
+        LOG_ERROR("=============== TRACE BEGIN ===============");
     CC_DEFER
     {
         if (print_mode)
-            LOG_ERROR("[nexus] =============== TRACE END ===============");
+            LOG_ERROR("=============== TRACE END ===============");
     };
 
     // pre callbacks
     if (print_mode && !mPreCallbacks.empty())
-        LOG_ERROR("[nexus]   executing pre-callbacks");
+        LOG_ERROR("  executing pre-callbacks");
     for (auto& f : mPreCallbacks)
         f();
 
@@ -861,7 +876,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     CC_DEFER
     {
         if (print_mode && !mPostCallbacks.empty())
-            LOG_ERROR("[nexus]   executing post-callbacks");
+            LOG_ERROR("  executing post-callbacks");
         for (auto& f : mPostCallbacks)
             f();
     };
@@ -890,7 +905,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     // print symbolic execution
     if (print_mode)
     {
-        LOG_ERROR("[nexus] symbolic:");
+        LOG_ERROR("symbolic:");
         for (auto const& op : trace.ops)
         {
             cc::string s;
@@ -922,9 +937,9 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                 s += " : ";
                 s += cc::demangle(op.fun->return_type.name());
             }
-            LOG_ERROR("[nexus]   {}", s);
+            LOG_ERROR("  {}", s);
         }
-        LOG_ERROR("[nexus] actual:");
+        LOG_ERROR("actual:");
     }
     auto const print_inputs = [&value_to_string](function* f, cc::span<value*> args, cc::span<cc::string> vals)
     {
@@ -944,7 +959,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
             }
             s += ")";
         }
-        LOG_ERROR("[nexus]   {}", s);
+        LOG_ERROR("  {}", s);
     };
     auto const print_outputs = [&value_to_string](cc::string_view prefix, function* f, value const& v, cc::span<value*> args, cc::span<const cc::string> vals)
     {
@@ -980,7 +995,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
             s += " -> ";
             s += value_to_string(v);
         }
-        LOG_ERROR("[nexus]     {} {}", prefix, s);
+        LOG_ERROR("    {} {}", prefix, s);
     };
 
     // normal mode: no equivalence checking

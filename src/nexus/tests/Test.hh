@@ -110,6 +110,7 @@ private:
     cc::vector<cc::string> mBeforePatterns;
 
     friend class Nexus;
+    friend class MonteCarloTest;
 };
 
 namespace detail

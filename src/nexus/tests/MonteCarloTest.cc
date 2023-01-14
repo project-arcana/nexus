@@ -490,7 +490,7 @@ void nx::MonteCarloTest::execute()
     if (test->shouldReproduce())
     {
         CC_ASSERT(!test->reproduction().trace.empty() && "MCT needs a string reproduce (trace)");
-        LOG_ERROR("replaying MCT trace '{}'", test->reproduction().trace);
+        LOG_ERROR("replaying MCT trace '{}' for '{}'", test->reproduction().trace, test->name());
         auto trace = nx::detail::trace_decode(test->reproduction().trace);
         reproduceTrace(trace);
         return;

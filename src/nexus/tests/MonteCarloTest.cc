@@ -469,6 +469,12 @@ void nx::MonteCarloTest::addPostSessionCallback(cc::unique_function<void()> f)
     mPostCallbacks.emplace_back(cc::move(f));
 }
 
+void nx::MonteCarloTest::addFixedReproduction(cc::string reprString)
+{
+    CC_ASSERT(!reprString.empty());
+    mFixedReproductions.push_back(cc::move(reprString));
+}
+
 nx::MonteCarloTest::MonteCarloTest()
 {
     auto t = nx::detail::get_current_test();
@@ -496,20 +502,15 @@ void nx::MonteCarloTest::execute()
         return;
     }
 
-    if (test->isDebug())
+    auto const runMCT = [&]
     {
-        tryExecuteMachineNormally(trace, get_seed());
-        return;
-    }
+        // run fixed reproductions
+        for (auto const& repr : mFixedReproductions)
+        {
+            trace = deserializeTrace(nx::detail::trace_decode(repr));
+            replayTrace(trace, false);
+        }
 
-    // prepare execution
-    nx::detail::is_silenced() = true;
-    nx::detail::always_terminate() = true;
-    nx::detail::overwrite_assertion_handlers();
-
-    // first: try normal execution
-    try
-    {
         if (test->isEndless()) // endless exec
         {
             LOG("endless MONTE_CARLO_TEST(\"%s\")", test->name());
@@ -535,8 +536,26 @@ void nx::MonteCarloTest::execute()
         }
         else // single execution
         {
+            trace = {};
             tryExecuteMachineNormally(trace, get_seed());
         }
+    };
+
+    if (test->isDebug())
+    {
+        runMCT();
+        return;
+    }
+
+    // prepare execution
+    nx::detail::is_silenced() = true;
+    nx::detail::always_terminate() = true;
+    nx::detail::overwrite_assertion_handlers();
+
+    // first: try normal execution
+    try
+    {
+        runMCT();
     }
     catch (nx::detail::assertion_failed_exception const&)
     {
@@ -1378,46 +1397,47 @@ int nx::MonteCarloTest::machine_trace::complexity() const
     return c;
 }
 
-void nx::MonteCarloTest::reproduceTrace(cc::span<int const> serialized_trace)
+void nx::MonteCarloTest::reproduceTrace(cc::span<int const> serialized_trace) { replayTrace(deserializeTrace(serialized_trace), true); }
+
+nx::MonteCarloTest::machine_trace nx::MonteCarloTest::deserializeTrace(cc::span<const int> serialized_trace)
 {
     machine_trace trace;
-    { // deserialize trace
-        auto pos = 0;
-        auto const get_int = [&] { return serialized_trace[pos++]; };
 
-        // equivalence and functions
-        auto eq_idx = get_int();
-        cc::vector<function*> funs;
-        if (eq_idx == -1)
-        {
-            for (auto& f : mFunctions)
-                funs.push_back(&f);
-        }
-        else
-        {
-            trace.equiv = &mEquivalences[eq_idx];
+    auto pos = 0;
+    auto const get_int = [&] { return serialized_trace[pos++]; };
 
-            cc::vector<function*> funs_b;
-            machine::build_equivalence_checker(*this, *trace.equiv, funs, funs_b);
-        }
+    // equivalence and functions
+    auto eq_idx = get_int();
+    cc::vector<function*> funs;
+    if (eq_idx == -1)
+    {
+        for (auto& f : mFunctions)
+            funs.push_back(&f);
+    }
+    else
+    {
+        trace.equiv = &mEquivalences[eq_idx];
 
-        // rest of trace
-        while (pos < int(serialized_trace.size()))
-        {
-            auto& op = trace.ops.emplace_back();
-            op.seed = get_int();
-            op.function_idx = get_int();
-            op.fun = funs[op.function_idx];
-            op.return_value_idx = get_int();
-            auto arity = get_int();
-            CC_ASSERT(arity == op.fun->arity() && "invalid trace");
-            op.args_start_idx = int(trace.arg_indices.size());
-            for (auto ai = 0; ai < arity; ++ai)
-                trace.arg_indices.push_back(get_int());
-        }
+        cc::vector<function*> funs_b;
+        machine::build_equivalence_checker(*this, *trace.equiv, funs, funs_b);
     }
 
-    replayTrace(trace, true);
+    // rest of trace
+    while (pos < int(serialized_trace.size()))
+    {
+        auto& op = trace.ops.emplace_back();
+        op.seed = get_int();
+        op.function_idx = get_int();
+        op.fun = funs[op.function_idx];
+        op.return_value_idx = get_int();
+        auto arity = get_int();
+        CC_ASSERT(arity == op.fun->arity() && "invalid trace");
+        op.args_start_idx = int(trace.arg_indices.size());
+        for (auto ai = 0; ai < arity; ++ai)
+            trace.arg_indices.push_back(get_int());
+    }
+
+    return trace;
 }
 
 cc::string nx::MonteCarloTest::machine_trace::serialize_to_string(MonteCarloTest const& test) const

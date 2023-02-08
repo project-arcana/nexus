@@ -66,6 +66,13 @@ public:
     void addPreSessionCallback(cc::unique_function<void()> f);
     void addPostSessionCallback(cc::unique_function<void()> f);
 
+    /// adds a fixed reproduction that is re-run first on normal runs
+    /// e.g. if an MCT fail reports 'TEST(..., reproduce("--000-300.db1-200:ZZ01-200:7711-200-2-10")))'
+    ///      one could call addFixedReproduction("--000-300.db1-200:ZZ01-200:7711-200-2-10");
+    ///      so that this case is always run on normal executions
+    /// NOTE: the reproduction string is strongly coupled with the order of registered operations
+    void addFixedReproduction(cc::string reprString);
+
     template <class F>
     void testEquivalence(F&& test)
     {
@@ -97,6 +104,8 @@ private:
 
     void minimizeTrace(machine_trace& trace);
     void reproduceTrace(cc::span<int const> serialized_trace);
+
+    machine_trace deserializeTrace(cc::span<int const> serialized_trace);
 
     /// tries to replace a trace
     /// returns false if trace is invalid (e.g. violates a precondition)
@@ -415,6 +424,8 @@ private:
     cc::vector<cc::unique_function<void()>> mPreCallbacks;
     cc::vector<cc::unique_function<void()>> mPostCallbacks;
     cc::vector<equivalence> mEquivalences;
+
+    cc::vector<cc::string> mFixedReproductions;
 
     machine_trace* mCurrentTrace = nullptr;
 

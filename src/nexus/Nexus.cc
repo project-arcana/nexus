@@ -4,6 +4,7 @@
 #include <nexus/check.hh>
 #include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
+#include <nexus/detail/log.hh>
 #include <nexus/tests/Test.hh>
 
 #include <clean-core/hash.hh>
@@ -11,12 +12,10 @@
 #include <clean-core/unique_ptr.hh>
 
 #include <chrono>
+#include <cstdlib>
 #include <thread>
 
-// TODO: proper log
-#include <iomanip>
-#include <iostream>
-#include <sstream>
+#include <rich-log/log.hh>
 
 namespace
 {
@@ -71,17 +70,16 @@ int nx::Nexus::run()
 
     if (mPrintHelp)
     {
-        std::cout << "[nexus] version " << version << std::endl;
-        std::cout << "NOTE: nexus is still early in development." << std::endl;
-        std::cout << std::endl;
-        std::cout << "usage:" << std::endl;
-        std::cout << R"(  --help        shows this help)" << std::endl;
-        std::cout << R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))" << std::endl;
-        std::cout << std::endl;
-        std::cout << "stats:" << std::endl;
-        std::cout << "  - found " << detail::get_all_tests().size() << " tests" << std::endl;
-        std::cout << "  - found " << detail::get_all_apps().size() << " apps" << std::endl;
-        std::cout << std::endl;
+        LOG("version %s", version);
+        LOG("");
+        LOG("usage:");
+        LOG(R"(  --help        shows this help)");
+        LOG(R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
+        LOG("");
+        LOG("stats:");
+        LOG(" - found %s tests", detail::get_all_tests().size());
+        LOG(" - found %s apps", detail::get_all_apps().size());
+
         return EXIT_SUCCESS;
     }
 
@@ -151,17 +149,13 @@ int nx::Nexus::run()
         tests_to_run.push_back(t.get());
     }
 
-    std::cout << "[nexus] version " << version << std::endl;
-    std::cout << "[nexus] run with '--help' for options" << std::endl;
-    std::cout << "[nexus] detected " << tests.size() << (tests.size() == 1 ? " test" : " tests") << std::endl;
-    std::cout << "[nexus] running " << tests_to_run.size() << (tests_to_run.size() == 1 ? " test" : " tests");
-    if (disabled_tests > 0)
-        std::cout << " (" << disabled_tests << " disabled)";
-    std::cout << std::endl;
-    std::cout << "[nexus] TEST(..., seed(" << seed << "))" << std::endl;
-    std::cout << "==============================================================================" << std::endl;
-    std::cout << std::setprecision(4);
-    // TODO
+    LOG("version %s", version);
+    LOG("run with '--help' for options");
+    LOG("detected %s %s", tests.size(), tests.size() == 1 ? "test" : "tests");
+    LOG("running %s %s%s", tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests",
+        disabled_tests == 0 ? "" : cc::format(" (%s disabled)", disabled_tests));
+    LOG("TEST(..., seed(%s))", seed);
+    LOG("==============================================================================");
 
     // execute tests
     // TODO: timings and statistics and so on
@@ -180,9 +174,8 @@ int nx::Nexus::run()
         t->mFunctionBefore();
 
         // execute and measure
-        auto const start_thread = std::this_thread::get_id();
         auto const start = std::chrono::high_resolution_clock::now();
-        if (t->isDebug())
+        if (t->isDebug() || t->shouldReproduce())
             t->function()();
         else
         {
@@ -196,7 +189,6 @@ int nx::Nexus::run()
             }
         }
         auto const end = std::chrono::high_resolution_clock::now();
-        auto const end_thread = std::this_thread::get_id();
 
         t->mFunctionAfter(t->mCounters);
 
@@ -215,8 +207,7 @@ int nx::Nexus::run()
             if (!t->didFail())
             {
                 num_failed_tests++;
-                std::cerr << "Test [" << t->name() << "] should have failed but didn't." << std::endl;
-                std::cerr << "  in " << t->file() << ":" << t->line() << std::endl;
+                LOG_WARN("Test [%s] should have failed but didn't.\n  in %s:%s", t->name(), t->file(), t->line());
             }
         }
         else
@@ -240,26 +231,18 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-        printf("  %-60s ... %6d checks in %.4f ms\n", t->name(), num_checks, test_time_ms);
-        if (start_thread != end_thread)
-            std::cerr << " (WARNING: changed OS thread, from " << start_thread << " to " << end_thread << ")" << std::endl;
+        LOG("  %<60s ... %6d checks in %.4f ms", t->name(), num_checks, test_time_ms);
     }
 
-    std::cout.flush();
-    std::cerr.flush();
-    std::cout << "==============================================================================" << std::endl;
-    std::cout << "[nexus] passed " << tests_to_run.size() - num_failed_tests << " of " << tests_to_run.size()
-              << (tests_to_run.size() == 1 ? " test" : " tests") << " in " << total_time_ms << " ms";
-    if (num_failed_tests > 0)
-        std::cout << " (" << num_failed_tests << " failed)";
-    std::cout << std::endl;
-    std::cout << "[nexus] checked " << total_num_checks << " assertions";
-    if (total_num_failed_checks > 0)
-        std::cout << " (" << total_num_failed_checks << " failed)";
-    std::cout << std::endl;
+    LOG("==============================================================================");
+    LOG("passed %d of %d %s in %.4f ms%s", //
+        tests_to_run.size() - num_failed_tests, tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests", total_time_ms,
+        num_failed_tests == 0 ? "" : cc::format(" (%d failed)", num_failed_tests));
+    LOG("checked %d assertions%s", total_num_checks, total_num_failed_checks == 0 ? "" : cc::format(" (%d failed)", total_num_failed_checks));
+
     if (tests.empty())
     {
-        std::cerr << "[nexus] WARNING: no tests found/selected" << std::endl;
+        LOG_WARN("no tests found/selected");
         return EXIT_SUCCESS;
     }
     else if (num_failed_tests > 0)
@@ -267,32 +250,45 @@ int nx::Nexus::run()
         for (auto const& t : tests)
             if (t->didFail() != t->shouldFail())
             {
-                std::cerr << "[nexus] test [" << t->name() << "] failed (seed " << t->seed();
+                cc::string repr;
                 if (t->shouldReproduce())
                 {
-                    std::cerr << ", reproduce via TEST(..., reproduce(";
+                    repr += ", reproduce via TEST(..., reproduce(";
                     if (t->reproduction().trace.empty())
-                        std::cerr << t->reproduction().seed;
+                        repr += cc::to_string(t->reproduction().seed);
                     else
-                        std::cerr << '"' << t->reproduction().trace.c_str() << '"';
-                    std::cerr << "))";
+                    {
+                        repr += '"';
+                        repr += t->reproduction().trace;
+                        repr += '"';
+                    }
+                    repr += "))";
                 }
-                std::cerr << ")" << std::endl;
+                LOG_WARN("test [%s] failed (seed %d%s)", t->name(), t->seed(), repr);
+                LOG_WARN("  %s:%s", t->file(), t->line());
             }
-        std::cerr << "[nexus] ERROR: " << total_num_failed_checks << " ASSERTION" << (total_num_failed_checks == 1 ? "" : "S") << " FAILED" << std::endl;
-        std::cerr << "[nexus] ERROR: " << num_failed_tests << " TEST" << (num_failed_tests == 1 ? "" : "S") << " FAILED" << std::endl;
+
+        LOG_WARN("%d %s failed", total_num_failed_checks, total_num_failed_checks == 1 ? "ASSERTION" : "ASSERTIONS");
+        LOG_WARN("%d %s failed", num_failed_tests, num_failed_tests == 1 ? "TEST" : "TESTS");
+
         return EXIT_FAILURE;
     }
     else
     {
-        std::cout << "[nexus] success." << std::endl;
+        LOG("success.");
         if (!empty_tests.empty())
         {
-            std::cerr << "[nexus] WARNING: " << empty_tests.size() << " test(s) have no assertions." << std::endl;
-            std::cerr << "[nexus]   (this can indicate a bug and can be silenced with \"CHECK(true);\")" << std::endl;
-            std::cerr << "[nexus]   affected tests:" << std::endl;
+            cc::string warn_log;
+            cc::format_to(warn_log, "%d test(s) have no assertions.\n", empty_tests.size());
+            warn_log += "(this can indicate a bug and can be silenced with \"CHECK(true);\")\n";
+            warn_log += "affected tests:\n";
             for (auto t : empty_tests)
-                std::cerr << "[nexus]   - [" << t->name() << "]" << std::endl;
+            {
+                cc::format_to(warn_log, "  - [%s]\n", t->name());
+                cc::format_to(warn_log, "    in %s:%s\n", t->file(), t->line());
+            }
+            warn_log.pop_back();
+            LOG_WARN("%s", warn_log);
         }
 
         return EXIT_SUCCESS;

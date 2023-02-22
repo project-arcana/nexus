@@ -1,5 +1,8 @@
 #include "test.hh"
 
+#include <rich-log/log.hh>
+
+#include <nexus/detail/log.hh>
 #include <nexus/tests/Test.hh>
 
 #include <clean-core/unique_ptr.hh>
@@ -38,6 +41,20 @@ size_t nx::get_seed()
     return t->seed();
 }
 
+bool nx::is_current_test_debug()
+{
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t && "no active test");
+    return t->isDebug();
+}
+
+bool nx::is_current_test_reproduction()
+{
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t && "no active test");
+    return t->shouldReproduce();
+}
+
 void detail::configure(Test* t, const endless_t&) { t->setEndless(); }
 
 void detail::configure(Test* t, const reproduce& r) { t->setReproduce(r); }
@@ -47,3 +64,10 @@ void detail::configure(Test* t, const disabled_t&) { t->setDisabled(); }
 void detail::configure(Test* t, const debug_t&) { t->setDebug(); }
 
 void detail::configure(Test* t, const verbose_t&) { t->setVerbose(); }
+
+void nx::print_current_test_reproduction()
+{
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t && "no active test");
+    LOG("%s", t->makeCurrentReproductionCommand());
+}

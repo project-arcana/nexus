@@ -51,6 +51,7 @@ public:
     void setDebug() { mIsDebug = true; }
     void setVerbose() { mIsVerbose = true; }
     void setReproduce(reproduce r) { mReproduction = r; }
+    void setMonteCarloTest(MonteCarloTest* mct) { mMCT = mct; }
     void addAfterPattern(cc::string pattern) { mAfterPatterns.push_back(cc::move(pattern)); }
     void addBeforePattern(cc::string pattern) { mBeforePatterns.push_back(cc::move(pattern)); }
 
@@ -61,6 +62,8 @@ public:
     }
 
     void setDidFail(bool didFail) { mDidFail = didFail; }
+
+    cc::string makeCurrentReproductionCommand() const;
 
     // ctor
 public:
@@ -99,12 +102,15 @@ private:
     int mArgC = 0;
     char const* const* mArgV = nullptr;
 
+    MonteCarloTest* mMCT = nullptr;
+
     reproduce mReproduction = reproduce::none();
 
     cc::vector<cc::string> mAfterPatterns;
     cc::vector<cc::string> mBeforePatterns;
 
     friend class Nexus;
+    friend class MonteCarloTest;
 };
 
 namespace detail

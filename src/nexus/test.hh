@@ -71,6 +71,19 @@ namespace nx
 /// NOTE: only valid inside a test!
 NX_API size_t get_seed();
 
+/// true iff the current test is in debug mode
+/// NOTE: only valid inside a test!
+NX_API bool is_current_test_debug();
+
+/// true iff the current test is in reproduction mode
+/// NOTE: only valid inside a test!
+NX_API bool is_current_test_reproduction();
+
+/// prints a reproduction string for the current test
+/// NOTE: only works with MCTs currently
+/// NOTE: only valid inside a test!
+NX_API void print_current_test_reproduction();
+
 namespace detail
 {
 NX_API Test* register_test(

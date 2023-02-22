@@ -6,6 +6,7 @@
 
 #include <clean-core/capped_vector.hh>
 #include <clean-core/has_operator.hh>
+#include <clean-core/invoke.hh>
 #include <clean-core/map.hh>
 #include <clean-core/span.hh>
 #include <clean-core/string.hh>
@@ -66,6 +67,13 @@ public:
     void addPreSessionCallback(cc::unique_function<void()> f);
     void addPostSessionCallback(cc::unique_function<void()> f);
 
+    /// adds a fixed reproduction that is re-run first on normal runs
+    /// e.g. if an MCT fail reports 'TEST(..., reproduce("--000-300.db1-200:ZZ01-200:7711-200-2-10")))'
+    ///      one could call addFixedReproduction("--000-300.db1-200:ZZ01-200:7711-200-2-10");
+    ///      so that this case is always run on normal executions
+    /// NOTE: the reproduction string is strongly coupled with the order of registered operations
+    void addFixedReproduction(cc::string reprString);
+
     template <class F>
     void testEquivalence(F&& test)
     {
@@ -83,6 +91,8 @@ public:
         mTypeMetadata[std::type_index(typeid(T))].to_string = [f = cc::move(f)](void* p) { return f(*static_cast<T const*>(p)); };
     }
 
+    MonteCarloTest();
+
     // execution
 public:
     void execute();
@@ -91,10 +101,12 @@ public:
 
     // impls
 private:
-    void tryExecuteMachineNormally(machine_trace& trace);
+    void tryExecuteMachineNormally(machine_trace& trace, size_t seed);
 
     void minimizeTrace(machine_trace& trace);
     void reproduceTrace(cc::span<int const> serialized_trace);
+
+    machine_trace deserializeTrace(cc::span<int const> serialized_trace);
 
     /// tries to replace a trace
     /// returns false if trace is invalid (e.g. violates a precondition)
@@ -179,7 +191,7 @@ private:
         static R apply(F&& f, [[maybe_unused]] cc::span<value*> inputs, std::index_sequence<I...>)
         {
             // TODO: proper rvalue ref support (maybe via forward?)
-            return f((*static_cast<std::decay_t<Args>*>(inputs[I]->ptr))...);
+            return cc::invoke(f, (*static_cast<std::decay_t<Args>*>(inputs[I]->ptr))...);
         }
     };
 
@@ -287,15 +299,40 @@ private:
         {
             CC_ASSERT(!precondition && "already has a precondition");
             static_assert(std::is_same_v<R, bool>, "precondition must return bool");
-            // check correct argument types
-            CC_ASSERT(sizeof...(Args) <= arg_types.size() && "precondition arguments must at most be as many as op arguments");
+
             cc::capped_vector<std::type_index, sizeof...(Args)> p_types;
             (p_types.emplace_back(typeid(std::decay_t<Args>)), ...);
-            for (size_t i = 0; i < sizeof...(Args); ++i)
-                CC_ASSERT(p_types[i] == arg_types[i] && "precondition arguments types must match op arguments");
 
-            precondition = [f = cc::forward<F>(f)](cc::span<value*> inputs) -> bool
-            { return executor<Args...>::template apply<bool>(f, inputs.subspan(0, sizeof...(Args)), std::index_sequence_for<Args...>()); };
+            // single-arg must only match at least one type
+            if constexpr (sizeof...(Args) == 1)
+            {
+                auto cnt = 0;
+                for (auto t : arg_types)
+                    if (t == p_types[0])
+                        ++cnt;
+                CC_ASSERT(cnt > 0 && "at least one type must apply. did the precondition not match properly?");
+
+                precondition = [p_type = cc::move(p_types[0]), f = cc::forward<F>(f)](cc::span<value*> inputs) -> bool { //
+                    for (auto v : inputs)
+                        if (v->type == p_type)
+                        {
+                            if (!cc::invoke(f, (*static_cast<std::decay_t<Args>*>(v->ptr))...))
+                                return false;
+                        }
+                    return true;
+                };
+            }
+            else
+            {
+                // check correct argument types
+                CC_ASSERT(sizeof...(Args) <= arg_types.size() && "precondition arguments must at most be as many as op arguments");
+                for (size_t i = 0; i < sizeof...(Args); ++i)
+                    CC_ASSERT(p_types[i] == arg_types[i] && "precondition arguments types must match op arguments");
+
+                precondition = [f = cc::forward<F>(f)](cc::span<value*> inputs) -> bool { //
+                    return executor<Args...>::template apply<bool>(f, inputs.subspan(0, sizeof...(Args)), std::index_sequence_for<Args...>());
+                };
+            }
         }
 
     private:
@@ -330,6 +367,7 @@ private:
             int function_idx = -1;
             int args_start_idx = -1;
             int return_value_idx = -1;
+            int seed = -1;
             function* fun = nullptr;
         };
 
@@ -387,5 +425,11 @@ private:
     cc::vector<cc::unique_function<void()>> mPreCallbacks;
     cc::vector<cc::unique_function<void()>> mPostCallbacks;
     cc::vector<equivalence> mEquivalences;
+
+    cc::vector<cc::string> mFixedReproductions;
+
+    machine_trace* mCurrentTrace = nullptr;
+
+    friend class Test;
 };
 }

@@ -14,8 +14,8 @@
 #include <clean-core/vector.hh>
 
 #include <nexus/check.hh>
-#include <nexus/detail/signature.hh>
 #include <nexus/detail/api.hh>
+#include <nexus/detail/signature.hh>
 #include <nexus/fwd.hh>
 
 #ifdef NX_HAS_REFLECTOR
@@ -92,6 +92,8 @@ public:
     }
 
     MonteCarloTest();
+    MonteCarloTest(MonteCarloTest const&) = delete;
+    MonteCarloTest& operator=(MonteCarloTest const&) = delete;
 
     // execution
 public:

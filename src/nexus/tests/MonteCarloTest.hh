@@ -14,6 +14,7 @@
 
 #include <nexus/check.hh>
 #include <nexus/detail/signature.hh>
+#include <nexus/detail/api.hh>
 #include <nexus/fwd.hh>
 
 #ifdef NX_HAS_REFLECTOR
@@ -24,7 +25,7 @@
 namespace nx
 {
 // TODO: allow when for a subset of arguments as long as it's unambiguous
-class MonteCarloTest
+class NX_API MonteCarloTest
 {
     // fwd
 private:

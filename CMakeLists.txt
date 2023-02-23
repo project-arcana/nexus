@@ -8,7 +8,7 @@ endif()
 # =========================================
 # global options
 
-option(NEXUS_FORCE_MACRO_PREFIX "if true, only NX_ macro versions are available" OFF)
+option(NX_FORCE_MACRO_PREFIX "if true, only NX_ macro versions are available" OFF)
 
 # =========================================
 # define library
@@ -45,6 +45,7 @@ endif()
 # =========================================
 # set up compile flags
 
-if (NEXUS_FORCE_MACRO_PREFIX)
+# the second option is for backwards compatibility with the previous name
+if (NX_FORCE_MACRO_PREFIX OR NEXUS_FORCE_MACRO_PREFIX)
     target_compile_definitions(nexus PUBLIC NX_FORCE_MACRO_PREFIX)
 endif()

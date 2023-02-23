@@ -52,7 +52,7 @@ bool args::parse()
     if (auto a = nx::detail::get_current_app())
         return parse(a->argc(), a->argv());
 
-    LOG_ERROR("no-arg version can only be used inside Nexus Apps" );
+    RICH_LOG_ERROR("no-arg version can only be used inside Nexus Apps" );
     return false;
 }
 
@@ -130,13 +130,13 @@ bool args::parse(int argc, char const* const* argv)
                     }
                     else if (has_value)
                     {
-                        LOG_ERROR("argument `--%s' has a value but should not have one.", s );
+                        RICH_LOG_ERROR("argument `--%s' has a value but should not have one.", s );
                         return false;
                     }
                     return true;
                 }
 
-        LOG_ERROR("unknown argument `--%s'", s);
+        RICH_LOG_ERROR("unknown argument `--%s'", s);
         return false;
     };
 
@@ -183,7 +183,7 @@ bool args::parse(int argc, char const* const* argv)
 
             if (!ar)
             {
-                LOG_ERROR("unknown argument `-%s'", s[i]);
+                RICH_LOG_ERROR("unknown argument `-%s'", s[i]);
                 return false;
             }
         }
@@ -236,7 +236,7 @@ bool args::parse(int argc, char const* const* argv)
 
     if (valarg)
     {
-        LOG_ERROR("unexpected end of arguments. expected value after `%s'", argv[argc - 1]);
+        RICH_LOG_ERROR("unexpected end of arguments. expected value after `%s'", argv[argc - 1]);
         return false;
     }
 
@@ -255,7 +255,7 @@ bool args::parse(int argc, char const* const* argv)
 
         if (blocked_args.contains(a.a))
         {
-            LOG_ERROR("argument `%s' was provided multiple times (this is only allowed for boolean/flag args)", a.a->names.front());
+            RICH_LOG_ERROR("argument `%s' was provided multiple times (this is only allowed for boolean/flag args)", a.a->names.front());
             return false;
         }
 
@@ -286,7 +286,7 @@ bool args::parse(int argc, char const* const* argv)
     {
         if (!v.fun())
         {
-            LOG_ERROR("validation failed: %s", v.desc);
+            RICH_LOG_ERROR("validation failed: %s", v.desc);
             return false;
         }
     }
@@ -504,7 +504,7 @@ cc::span<const char* const> get_cmd_args()
     }
     else
     {
-        LOG_WARN("nx::get_cmd_args() was called outside of an active app or test\n");
+        RICH_LOG_WARN("nx::get_cmd_args() was called outside of an active app or test\n");
         return {};
     }
 }

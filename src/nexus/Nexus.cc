@@ -70,15 +70,15 @@ int nx::Nexus::run()
 
     if (mPrintHelp)
     {
-        LOG("version %s", version);
-        LOG("");
-        LOG("usage:");
-        LOG(R"(  --help        shows this help)");
-        LOG(R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
-        LOG("");
-        LOG("stats:");
-        LOG(" - found %s tests", detail::get_all_tests().size());
-        LOG(" - found %s apps", detail::get_all_apps().size());
+        RICH_LOG("version %s", version);
+        RICH_LOG("");
+        RICH_LOG("usage:");
+        RICH_LOG(R"(  --help        shows this help)");
+        RICH_LOG(R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
+        RICH_LOG("");
+        RICH_LOG("stats:");
+        RICH_LOG(" - found %s tests", detail::get_all_tests().size());
+        RICH_LOG(" - found %s apps", detail::get_all_apps().size());
 
         return EXIT_SUCCESS;
     }
@@ -149,13 +149,13 @@ int nx::Nexus::run()
         tests_to_run.push_back(t.get());
     }
 
-    LOG("version %s", version);
-    LOG("run with '--help' for options");
-    LOG("detected %s %s", tests.size(), tests.size() == 1 ? "test" : "tests");
-    LOG("running %s %s%s", tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests",
+    RICH_LOG("version %s", version);
+    RICH_LOG("run with '--help' for options");
+    RICH_LOG("detected %s %s", tests.size(), tests.size() == 1 ? "test" : "tests");
+    RICH_LOG("running %s %s%s", tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests",
         disabled_tests == 0 ? "" : cc::format(" (%s disabled)", disabled_tests));
-    LOG("TEST(..., seed(%s))", seed);
-    LOG("==============================================================================");
+    RICH_LOG("TEST(..., seed(%s))", seed);
+    RICH_LOG("==============================================================================");
 
     // execute tests
     // TODO: timings and statistics and so on
@@ -207,7 +207,7 @@ int nx::Nexus::run()
             if (!t->didFail())
             {
                 num_failed_tests++;
-                LOG_WARN("Test [%s] should have failed but didn't.\n  in %s:%s", t->name(), t->file(), t->line());
+                RICH_LOG_WARN("Test [%s] should have failed but didn't.\n  in %s:%s", t->name(), t->file(), t->line());
             }
         }
         else
@@ -231,18 +231,18 @@ int nx::Nexus::run()
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
 
-        LOG("  %<60s ... %6d checks in %.4f ms", t->name(), num_checks, test_time_ms);
+        RICH_LOG("  %<60s ... %6d checks in %.4f ms", t->name(), num_checks, test_time_ms);
     }
 
-    LOG("==============================================================================");
-    LOG("passed %d of %d %s in %.4f ms%s", //
+    RICH_LOG("==============================================================================");
+    RICH_LOG("passed %d of %d %s in %.4f ms%s", //
         tests_to_run.size() - num_failed_tests, tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests", total_time_ms,
         num_failed_tests == 0 ? "" : cc::format(" (%d failed)", num_failed_tests));
-    LOG("checked %d assertions%s", total_num_checks, total_num_failed_checks == 0 ? "" : cc::format(" (%d failed)", total_num_failed_checks));
+    RICH_LOG("checked %d assertions%s", total_num_checks, total_num_failed_checks == 0 ? "" : cc::format(" (%d failed)", total_num_failed_checks));
 
     if (tests.empty())
     {
-        LOG_WARN("no tests found/selected");
+        RICH_LOG_WARN("no tests found/selected");
         return EXIT_SUCCESS;
     }
     else if (num_failed_tests > 0)
@@ -264,18 +264,18 @@ int nx::Nexus::run()
                     }
                     repr += "))";
                 }
-                LOG_WARN("test [%s] failed (seed %d%s)", t->name(), t->seed(), repr);
-                LOG_WARN("  %s:%s", t->file(), t->line());
+                RICH_LOG_WARN("test [%s] failed (seed %d%s)", t->name(), t->seed(), repr);
+                RICH_LOG_WARN("  %s:%s", t->file(), t->line());
             }
 
-        LOG_WARN("%d %s failed", total_num_failed_checks, total_num_failed_checks == 1 ? "ASSERTION" : "ASSERTIONS");
-        LOG_WARN("%d %s failed", num_failed_tests, num_failed_tests == 1 ? "TEST" : "TESTS");
+        RICH_LOG_WARN("%d %s failed", total_num_failed_checks, total_num_failed_checks == 1 ? "ASSERTION" : "ASSERTIONS");
+        RICH_LOG_WARN("%d %s failed", num_failed_tests, num_failed_tests == 1 ? "TEST" : "TESTS");
 
         return EXIT_FAILURE;
     }
     else
     {
-        LOG("success.");
+        RICH_LOG("success.");
         if (!empty_tests.empty())
         {
             cc::string warn_log;
@@ -288,7 +288,7 @@ int nx::Nexus::run()
                 cc::format_to(warn_log, "    in %s:%s\n", t->file(), t->line());
             }
             warn_log.pop_back();
-            LOG_WARN("%s", warn_log);
+            RICH_LOG_WARN("%s", warn_log);
         }
 
         return EXIT_SUCCESS;

@@ -69,5 +69,5 @@ void nx::print_current_test_reproduction()
 {
     auto t = nx::detail::get_current_test();
     CC_ASSERT(t && "no active test");
-    LOG("%s", t->makeCurrentReproductionCommand());
+    RICH_LOG("%s", t->makeCurrentReproductionCommand());
 }

@@ -42,7 +42,7 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
     };
 
     if (test->isEndless())
-        LOG("endless FUZZ_TEST(\"%s\")", test->name());
+        RICH_LOG("endless FUZZ_TEST(\"%s\")", test->name());
 
     auto c_start = cc::intrin_rdtsc();
     auto it = 0;
@@ -79,7 +79,7 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
             if (t1 - t0 > 1000ms)
             {
                 t0 = t1;
-                LOG("endless FUZZ_TEST: %s assertions", nx::detail::number_of_assertions() - assert_cnt_start);
+                RICH_LOG("endless FUZZ_TEST: %s assertions", nx::detail::number_of_assertions() - assert_cnt_start);
             }
 
             continue;

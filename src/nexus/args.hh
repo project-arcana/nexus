@@ -34,61 +34,115 @@ public:
     args& operator=(args&&) = default;
     args& operator=(args const&) = delete;
 
-    args& disable_help();
+    args& disable_help() &;
+    args&& disable_help() &&;
 
-    args& group(cc::string name);
+    args& group(cc::string name) &;
+    args&& group(cc::string name) &&;
 
     template <class T>
-    args& add(T& v, cc::string name, cc::string desc)
+    args& add(T& v, cc::string name, cc::string desc) &
     {
         auto& a = add_arg({cc::move(name)}, cc::move(desc));
         a.register_var_parse(v);
         return *this;
     }
+
     template <class T>
-    args& add(T& v, std::initializer_list<cc::string> names, cc::string desc)
+    args&& add(T& v, cc::string name, cc::string desc) &&
+    {
+        auto& a = add_arg({cc::move(name)}, cc::move(desc));
+        a.register_var_parse(v);
+        return cc::move(*this);
+    }
+
+    template <class T>
+    args& add(T& v, std::initializer_list<cc::string> names, cc::string desc) &
     {
         auto& a = add_arg(names, cc::move(desc));
         a.register_var_parse(v);
         return *this;
     }
+    template <class T>
+    args&& add(T& v, std::initializer_list<cc::string> names, cc::string desc) &&
+    {
+        auto& a = add_arg(names, cc::move(desc));
+        a.register_var_parse(v);
+        return cc::move(*this);
+    }
 
     template <class T = bool>
-    args& add(cc::string name, cc::string desc)
+    args& add(cc::string name, cc::string desc) &
     {
         auto& a = add_arg({cc::move(name)}, cc::move(desc));
         a.expect_val = !std::is_same_v<T, bool>;
         return *this;
     }
     template <class T = bool>
-    args& add(std::initializer_list<cc::string> names, cc::string desc)
+    args&& add(cc::string name, cc::string desc) &&
+    {
+        auto& a = add_arg({cc::move(name)}, cc::move(desc));
+        a.expect_val = !std::is_same_v<T, bool>;
+        return cc::move(*this);
+    }
+
+    template <class T = bool>
+    args& add(std::initializer_list<cc::string> names, cc::string desc) &
     {
         auto& a = add_arg(names, cc::move(desc));
         a.expect_val = !std::is_same_v<T, bool>;
         return *this;
     }
+    template <class T = bool>
+    args&& add(std::initializer_list<cc::string> names, cc::string desc) &&
+    {
+        auto& a = add_arg(names, cc::move(desc));
+        a.expect_val = !std::is_same_v<T, bool>;
+        return cc::move(*this);
+    }
 
-    args& version(cc::string v);
+    args& version(cc::string v) &;
+    args&& version(cc::string v) &&;
 
     template <class T>
-    args& add_positional(T& v, char metavar, cc::string desc)
+    args& add_positional(T& v, char metavar, cc::string desc) &
     {
         auto& a = add_pos_arg(metavar, cc::move(desc));
         a.register_var_parse(v);
         return *this;
     }
     template <class T>
-    args& add_positional(char metavar, cc::string desc)
+    args&& add_positional(T& v, char metavar, cc::string desc) &&
+    {
+        auto& a = add_pos_arg(metavar, cc::move(desc));
+        a.register_var_parse(v);
+        return cc::move(*this);
+    }
+    template <class T>
+    args& add_positional(char metavar, cc::string desc) &
     {
         add_pos_arg(metavar, cc::move(desc));
         return *this;
     }
     template <class T>
-    args& add_positional_variadic(char metavar, cc::string desc)
+    args&& add_positional(char metavar, cc::string desc) &&
+    {
+        add_pos_arg(metavar, cc::move(desc));
+        return cc::move(*this);
+    }
+    template <class T>
+    args& add_positional_variadic(char metavar, cc::string desc) &
     {
         auto& a = add_pos_arg(metavar, cc::move(desc));
         a.variadic = true;
         return *this;
+    }
+    template <class T>
+    args&& add_positional_variadic(char metavar, cc::string desc) &&
+    {
+        auto& a = add_pos_arg(metavar, cc::move(desc));
+        a.variadic = true;
+        return cc::move(*this);
     }
 
     /// adds a function to be called at the end of parsing to validate an arbitrary property
@@ -111,7 +165,8 @@ public:
     ///
     ///   CC_ASSERT(i * j > 0); // will never fail here
     ///
-    args& validate(cc::string_view desc, cc::unique_function<bool()> validate_fun);
+    args& validate(cc::string_view desc, cc::unique_function<bool()> validate_fun) &;
+    args&& validate(cc::string_view desc, cc::unique_function<bool()> validate_fun) &&;
 
     // parse
 public:

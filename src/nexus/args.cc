@@ -1,13 +1,16 @@
 #include "args.hh"
 
-#include <cstdio>
+// TODO: remove me (currently used for printing help, could be replaced by cc::print)
 #include <iostream>
+
+#include <rich-log/log.hh>
 
 #include <clean-core/pair.hh>
 #include <clean-core/set.hh>
 
 #include <nexus/apps/App.hh>
 #include <nexus/tests/Test.hh>
+#include <nexus/detail/log.hh>
 
 namespace nx
 {
@@ -49,7 +52,7 @@ bool args::parse()
     if (auto a = nx::detail::get_current_app())
         return parse(a->argc(), a->argv());
 
-    std::cerr << "no-arg version can only be used inside Nexus Apps" << std::endl;
+    RICH_LOG_ERROR("no-arg version can only be used inside Nexus Apps" );
     return false;
 }
 
@@ -127,13 +130,13 @@ bool args::parse(int argc, char const* const* argv)
                     }
                     else if (has_value)
                     {
-                        std::cerr << "argument `--" << cc::string(s).c_str() << "' has a value but should not have one." << std::endl;
+                        RICH_LOG_ERROR("argument `--%s' has a value but should not have one.", s );
                         return false;
                     }
                     return true;
                 }
 
-        std::cerr << "unknown argument `--" << cc::string(s).c_str() << "'" << std::endl;
+        RICH_LOG_ERROR("unknown argument `--%s'", s);
         return false;
     };
 
@@ -180,7 +183,7 @@ bool args::parse(int argc, char const* const* argv)
 
             if (!ar)
             {
-                std::cerr << "unknown argument `-" << s[i] << "'" << std::endl;
+                RICH_LOG_ERROR("unknown argument `-%s'", s[i]);
                 return false;
             }
         }
@@ -233,7 +236,7 @@ bool args::parse(int argc, char const* const* argv)
 
     if (valarg)
     {
-        std::cerr << "unexpected end of arguments. expected value after `" << argv[argc - 1] << "'" << std::endl;
+        RICH_LOG_ERROR("unexpected end of arguments. expected value after `%s'", argv[argc - 1]);
         return false;
     }
 
@@ -252,7 +255,7 @@ bool args::parse(int argc, char const* const* argv)
 
         if (blocked_args.contains(a.a))
         {
-            std::cerr << "argument `" << a.a->names.front().c_str() << "' was provided multiple times (this is only allowed for boolean/flag args)" << std::endl;
+            RICH_LOG_ERROR("argument `%s' was provided multiple times (this is only allowed for boolean/flag args)", a.a->names.front());
             return false;
         }
 
@@ -283,7 +286,7 @@ bool args::parse(int argc, char const* const* argv)
     {
         if (!v.fun())
         {
-            std::cerr << "validation failed: " << v.desc.c_str() << std::endl;
+            RICH_LOG_ERROR("validation failed: %s", v.desc);
             return false;
         }
     }
@@ -501,7 +504,7 @@ cc::span<const char* const> get_cmd_args()
     }
     else
     {
-        std::fprintf(stderr, "[nexus] warning: nx::get_cmd_args() was called outside of an active app or test\n");
+        RICH_LOG_WARN("nx::get_cmd_args() was called outside of an active app or test\n");
         return {};
     }
 }

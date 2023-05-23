@@ -14,6 +14,7 @@ using app_fun_t = void (*)();
 
 class Test;
 class App;
+class MonteCarloTest;
 
 template <class T>
 struct minimize_options;

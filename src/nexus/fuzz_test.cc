@@ -1,12 +1,15 @@
 #include "fuzz_test.hh"
 
-#include <iostream> // TODO: proper log
+#include <rich-log/log.hh>
+
+#include <chrono>
 
 #include <clean-core/defer.hh>
 #include <clean-core/intrinsics.hh>
 
 #include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
+#include <nexus/detail/log.hh>
 #include <nexus/tests/Test.hh>
 
 
@@ -38,8 +41,13 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
         nx::detail::reset_assertion_handlers();
     };
 
+    if (test->isEndless())
+        RICH_LOG("endless FUZZ_TEST(\"%s\")", test->name());
+
     auto c_start = cc::intrin_rdtsc();
     auto it = 0;
+    auto assert_cnt_start = nx::detail::number_of_assertions();
+    auto t0 = std::chrono::high_resolution_clock::now();
     while (true)
     {
         auto seed = base_rng();
@@ -57,8 +65,6 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
             }
             catch (assertion_failed_exception const&)
             {
-                std::cerr << "[nexus] fuzz test [" << test->name() << "] failed." << std::endl;
-                std::cerr << "        (reproduce via TEST(..., reproduce(" << seed << ")) " << std::endl;
                 test->setReproduce(reproduce(seed));
                 return;
             }
@@ -66,7 +72,18 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
         ++it;
 
         if (test->isEndless())
+        {
+            // progress report
+            auto t1 = std::chrono::high_resolution_clock::now();
+            using namespace std::chrono_literals;
+            if (t1 - t0 > 1000ms)
+            {
+                t0 = t1;
+                RICH_LOG("endless FUZZ_TEST: %s assertions", nx::detail::number_of_assertions() - assert_cnt_start);
+            }
+
             continue;
+        }
 
         if (it > max_iterations)
             break;

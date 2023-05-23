@@ -79,7 +79,7 @@ cc::vector<int> nx::detail::trace_decode(cc::string_view encoded_string)
 
     cc::vector<int> v;
 
-    while (pos < encoded_string.size())
+    while (pos < int(encoded_string.size()))
         v.push_back(read_int());
 
     return v;

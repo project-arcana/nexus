@@ -10,6 +10,7 @@
 #include <nexus/detail/api.hh>
 #include <nexus/detail/exception.hh>
 #include <nexus/detail/make_string_repr.hh>
+#include <nexus/range.hh>
 
 #ifndef NX_FORCE_MACRO_PREFIX
 

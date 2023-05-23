@@ -1,5 +1,7 @@
 #include "MonteCarloTest.hh"
 
+#include <chrono>
+
 #include <rich-log/log.hh>
 
 #include <clean-core/array.hh>
@@ -18,12 +20,25 @@
 
 #include <nexus/detail/assertions.hh>
 #include <nexus/detail/exception.hh>
+#include <nexus/detail/log.hh>
 #include <nexus/detail/trace_serialize.hh>
 #include <nexus/minimize_options.hh>
 #include <nexus/test.hh>
 #include <nexus/tests/Test.hh>
 
 #include <cstdio>
+#include <typeindex>
+
+namespace
+{
+bool has_rng_arg(cc::span<std::type_index const> types)
+{
+    for (auto ti : types)
+        if (ti == typeid(tg::rng))
+            return true;
+    return false;
+}
+}
 
 struct nx::MonteCarloTest::machine
 {
@@ -113,8 +128,8 @@ struct nx::MonteCarloTest::machine
                     if (fa->is_optional)
                         continue; // not strictly required
 
-                    LOG_ERROR("operation '{}' not found for type {}", name, tb.name());
-                    LOG_ERROR("(note: an exact match is required, subtyping may interfere with this)");
+                    RICH_LOG_ERROR("operation '{}' not found for type {}", name, tb.name());
+                    RICH_LOG_ERROR("(note: an exact match is required, subtyping may interfere with this)");
                 }
                 CC_ASSERT(eq_funs_by_type.get(tb).contains_key(name) && "all functions checked for equivalence need to be defined for both types");
                 auto fb = eq_funs_by_type.get(tb).get(name);
@@ -142,15 +157,15 @@ struct nx::MonteCarloTest::machine
                 if (f_a->return_type == e.type_a)
                 {
                     if (f_b->return_type != e.type_b)
-                        LOG_ERROR("bisimulation return type mismatch for '{}': expected {}, got {}", f_a->name, cc::demangle(e.type_b.name()),
-                                  cc::demangle(f_b->return_type.name()));
+                        RICH_LOG_ERROR("bisimulation return type mismatch for '{}': expected {}, got {}", f_a->name, cc::demangle(e.type_b.name()),
+                                       cc::demangle(f_b->return_type.name()));
                     CC_ASSERT(f_b->return_type == e.type_b);
                 }
                 else
                 {
                     if (f_a->return_type != f_b->return_type)
-                        LOG_ERROR("bisimulation return type mismatch for '{}': {} vs {}", f_a->name, cc::demangle(f_a->return_type.name()),
-                                  cc::demangle(f_b->return_type.name()));
+                        RICH_LOG_ERROR("bisimulation return type mismatch for '{}': {} vs {}", f_a->name, cc::demangle(f_a->return_type.name()),
+                                       cc::demangle(f_b->return_type.name()));
                     CC_ASSERT(f_a->return_type == f_b->return_type);
                 }
 
@@ -252,14 +267,14 @@ struct nx::MonteCarloTest::machine
             for (auto a : f->arg_types)
                 if (!values.get(a).can_safely_generate())
                 {
-                    LOG_ERROR("no way to generate type {}", a.name());
+                    RICH_LOG_ERROR("no way to generate type {}", a.name());
                     return false;
                 }
 
         // sanity checks
         if (test_functions.empty())
         {
-            LOG_ERROR("no functions to test");
+            RICH_LOG_ERROR("no functions to test");
             return false;
         }
 
@@ -309,7 +324,7 @@ struct nx::MonteCarloTest::machine
 
             if (--max_tries < 0)
             {
-                LOG_ERROR("unable to generate values of type {}", f->return_type.name());
+                RICH_LOG_ERROR("unable to generate values of type {}", f->return_type.name());
                 return nullptr;
             }
         }
@@ -344,9 +359,14 @@ struct nx::MonteCarloTest::machine
         return max_tries >= 0;
     }
 
-    value execute(function* f, cc::span<value*> args, bool exec_invariants = true)
+    value execute(function* f, cc::span<value*> args, bool exec_invariants, int seed)
     {
         CC_ASSERT(int(args.size()) == f->arity());
+
+        // set to proper seed
+        for (auto a : args)
+            if (a->type == typeid(tg::rng))
+                ((tg::rng*)a->ptr)->seed(seed);
 
         auto v = f->execute(args);
         f->executions++;
@@ -449,28 +469,81 @@ void nx::MonteCarloTest::addPostSessionCallback(cc::unique_function<void()> f)
     mPostCallbacks.emplace_back(cc::move(f));
 }
 
+void nx::MonteCarloTest::addFixedReproduction(cc::string reprString)
+{
+    CC_ASSERT(!reprString.empty());
+    mFixedReproductions.push_back(cc::move(reprString));
+}
+
+nx::MonteCarloTest::MonteCarloTest()
+{
+    auto t = nx::detail::get_current_test();
+    CC_ASSERT(t != nullptr && "only creatable during tests");
+    t->setMonteCarloTest(this);
+}
+
 void nx::MonteCarloTest::execute()
 {
     machine_trace trace;
+    mCurrentTrace = &trace;
+    CC_DEFER { mCurrentTrace = nullptr; };
 
     auto test = nx::detail::get_current_test();
 
     CC_ASSERT(!test->shouldFail() && "should-fail tests not supported for MCT");
-    CC_ASSERT(!test->isEndless() && "endless mode not YET supported for MCT");
 
     // reproduce trace
     if (test->shouldReproduce())
     {
         CC_ASSERT(!test->reproduction().trace.empty() && "MCT needs a string reproduce (trace)");
-        LOG_ERROR("[nexus] replaying MCT trace '{}'", test->reproduction().trace);
+        RICH_LOG_ERROR("replaying MCT trace '{}' for '{}'", test->reproduction().trace, test->name());
         auto trace = nx::detail::trace_decode(test->reproduction().trace);
         reproduceTrace(trace);
         return;
     }
 
+    auto const runMCT = [&]
+    {
+        // run fixed reproductions
+        for (auto const& repr : mFixedReproductions)
+        {
+            trace = deserializeTrace(nx::detail::trace_decode(repr));
+            replayTrace(trace, false);
+        }
+
+        if (test->isEndless()) // endless exec
+        {
+            RICH_LOG("endless MONTE_CARLO_TEST(\"%s\")", test->name());
+
+            auto assert_cnt_start = nx::detail::number_of_assertions();
+            auto t0 = std::chrono::high_resolution_clock::now();
+            tg::rng seed_rng;
+            seed_rng.seed(get_seed());
+            while (true)
+            {
+                trace = {};
+                tryExecuteMachineNormally(trace, seed_rng());
+
+                // progress report
+                auto t1 = std::chrono::high_resolution_clock::now();
+                using namespace std::chrono_literals;
+                if (t1 - t0 > 1000ms)
+                {
+                    t0 = t1;
+                    RICH_LOG("endless MONTE_CARLO_TEST: %s assertions", nx::detail::number_of_assertions() - assert_cnt_start);
+                }
+            }
+        }
+        else // single execution
+        {
+            trace = {};
+            tryExecuteMachineNormally(trace, get_seed());
+        }
+    };
+
     if (test->isDebug())
     {
-        tryExecuteMachineNormally(trace);
+        runMCT();
         return;
     }
 
@@ -482,14 +555,14 @@ void nx::MonteCarloTest::execute()
     // first: try normal execution
     try
     {
-        tryExecuteMachineNormally(trace);
+        runMCT();
     }
     catch (nx::detail::assertion_failed_exception const&)
     {
         // on fail: try to minimize trace
-        LOG_ERROR("[nexus] MONTE_CARLO_TEST failed. Trying to generate minimal reproduction.");
+        RICH_LOG_ERROR("MONTE_CARLO_TEST failed. Trying to generate minimal reproduction.");
         minimizeTrace(trace);
-        LOG_ERROR("[nexus] .. done. result:");
+        RICH_LOG_ERROR(".. done. result:");
 
         // set reproduction BEFORE actually executing it
         test->setReproduce(reproduce(trace.serialize_to_string(*this)));
@@ -507,13 +580,13 @@ void nx::MonteCarloTest::execute()
     nx::detail::reset_assertion_handlers();
 }
 
-void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
+void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace, size_t seed)
 {
     auto verbose = detail::get_current_test()->isVerbose();
 
     // pre callbacks
     if (verbose)
-        LOG_INFO(" .. executing pre-callbacks ({})", mPreCallbacks.size());
+        RICH_LOG(" .. executing pre-callbacks ({})", mPreCallbacks.size());
     for (auto& f : mPreCallbacks)
         f();
 
@@ -521,20 +594,24 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
     CC_DEFER
     {
         if (verbose)
-            LOG_INFO(" .. executing post-callbacks ({})", mPreCallbacks.size());
+            RICH_LOG(" .. executing post-callbacks ({})", mPreCallbacks.size());
         for (auto& f : mPostCallbacks)
             f();
     };
 
     // helper
-    auto const add_trace = [&trace, verbose](function* f, int vi, cc::span<int> arg_indices)
+    auto const add_trace = [&trace, verbose](function* f, int vi, cc::span<int> arg_indices, int seed)
     {
         CC_ASSERT(f->arity() == int(arg_indices.size()));
 
         if (verbose)
-            LOG_INFO(" .. execute [{}]", f->name);
+            RICH_LOG(" .. execute [{}]", f->name);
+
+        if (!has_rng_arg(f->arg_types))
+            seed = -1; // less verbose trace
 
         machine_trace::op op;
+        op.seed = seed;
         op.function_idx = f->internal_idx;
         op.fun = f;
         op.args_start_idx = int(trace.arg_indices.size());
@@ -548,7 +625,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
     if (mEquivalences.empty())
     {
         tg::rng rng;
-        rng.seed(get_seed());
+        rng.seed(seed);
         trace.start(nullptr);
 
         // build machine
@@ -562,12 +639,14 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
         {
             if (unsuccessful_count > 1000)
             {
-                LOG_ERROR("unable to execute a test function (no precondition satisfied)");
+                RICH_LOG_ERROR("unable to execute a test function (no precondition satisfied)");
                 for (auto f : m.test_functions)
-                    LOG_ERROR("  .. could not execute '{}'", f->name);
+                    RICH_LOG_ERROR("  .. could not execute '{}'", f->name);
                 CHECK(false);
                 break;
             }
+
+            auto const seed = uniform(rng, 0, 9999);
 
             // get function ot test
             auto f = m.sample_suitable_test_function(rng);
@@ -587,10 +666,10 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
 
                     // add trace
                     auto vi = m.generate_integrated_value_idx(rng, ff->return_type);
-                    add_trace(ff, vi, cc::span<int>(index_buffer.data(), ff->arity()));
+                    add_trace(ff, vi, cc::span<int>(index_buffer.data(), ff->arity()), seed);
 
                     // execute
-                    auto v = m.execute(ff, args);
+                    auto v = m.execute(ff, args, true, seed);
                     m.integrate_value(cc::move(v), vi);
                 }
 
@@ -600,10 +679,10 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
 
             // add trace
             auto vi = m.generate_integrated_value_idx(rng, f->return_type);
-            add_trace(f, vi, arg_indices);
+            add_trace(f, vi, arg_indices, seed);
 
             // execute function
-            auto v = m.execute(f, args);
+            auto v = m.execute(f, args, true, seed);
             m.integrate_value(cc::move(v), vi);
             unsuccessful_count = 0;
 
@@ -618,7 +697,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
         {
             // seed rng
             tg::rng rng;
-            rng.seed(get_seed());
+            rng.seed(seed);
             trace.start(&e);
 
             // prepare machines
@@ -656,12 +735,14 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
                 CC_ASSERT(f_a->arity() == int(args_a.size()));
                 CC_ASSERT(f_b->arity() == int(args_b.size()));
 
+                auto const seed = uniform(rng, 0, 9999);
+
                 // add trace
                 auto vi = m_a.generate_integrated_value_idx(rng, f_a->return_type);
-                add_trace(f_a, vi, arg_indices);
+                add_trace(f_a, vi, arg_indices, seed);
 
-                auto va = m_a.execute(f_a, args_a);
-                auto vb = m_b.execute(f_b, args_b);
+                auto va = m_a.execute(f_a, args_a, true, seed);
+                auto vb = m_b.execute(f_b, args_b, true, seed);
 
                 // test equivalence
                 if (va.type == e.type_a)
@@ -711,9 +792,9 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace)
             {
                 if (unsuccessful_count > 1000)
                 {
-                    LOG_ERROR(" unable to execute a test function (no precondition satisfied)");
+                    RICH_LOG_ERROR(" unable to execute a test function (no precondition satisfied)");
                     for (auto f : m_a.test_functions)
-                        LOG_ERROR("  .. could not execute '{}'", f->name);
+                        RICH_LOG_ERROR("  .. could not execute '{}'", f->name);
                     CHECK(false);
                     break;
                 }
@@ -769,7 +850,7 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
 
     while (found_smaller) // TODO: time limit
     {
-        LOG_ERROR("[nexus]   .. trace complexity {}", trace.complexity());
+        RICH_LOG_ERROR("  .. trace complexity {}", trace.complexity());
         auto opts = trace.build_minimizer();
 
         found_smaller = false;
@@ -797,16 +878,16 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
 bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode)
 {
     if (print_mode)
-        LOG_ERROR("[nexus] =============== TRACE BEGIN ===============");
+        RICH_LOG_ERROR("=============== TRACE BEGIN ===============");
     CC_DEFER
     {
         if (print_mode)
-            LOG_ERROR("[nexus] =============== TRACE END ===============");
+            RICH_LOG_ERROR("=============== TRACE END ===============");
     };
 
     // pre callbacks
     if (print_mode && !mPreCallbacks.empty())
-        LOG_ERROR("[nexus]   executing pre-callbacks");
+        RICH_LOG_ERROR("  executing pre-callbacks");
     for (auto& f : mPreCallbacks)
         f();
 
@@ -814,7 +895,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     CC_DEFER
     {
         if (print_mode && !mPostCallbacks.empty())
-            LOG_ERROR("[nexus]   executing post-callbacks");
+            RICH_LOG_ERROR("  executing post-callbacks");
         for (auto& f : mPostCallbacks)
             f();
     };
@@ -843,7 +924,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     // print symbolic execution
     if (print_mode)
     {
-        LOG_ERROR("[nexus] symbolic:");
+        RICH_LOG_ERROR("symbolic:");
         for (auto const& op : trace.ops)
         {
             cc::string s;
@@ -875,9 +956,9 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                 s += " : ";
                 s += cc::demangle(op.fun->return_type.name());
             }
-            LOG_ERROR("[nexus]   {}", s);
+            RICH_LOG_ERROR("  {}", s);
         }
-        LOG_ERROR("[nexus] actual:");
+        RICH_LOG_ERROR("actual:");
     }
     auto const print_inputs = [&value_to_string](function* f, cc::span<value*> args, cc::span<cc::string> vals)
     {
@@ -897,7 +978,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
             }
             s += ")";
         }
-        LOG_ERROR("[nexus]   {}", s);
+        RICH_LOG_ERROR("  {}", s);
     };
     auto const print_outputs = [&value_to_string](cc::string_view prefix, function* f, value const& v, cc::span<value*> args, cc::span<const cc::string> vals)
     {
@@ -933,15 +1014,12 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
             s += " -> ";
             s += value_to_string(v);
         }
-        LOG_ERROR("[nexus]     {} {}", prefix, s);
+        RICH_LOG_ERROR("    {} {}", prefix, s);
     };
 
     // normal mode: no equivalence checking
     if (trace.equiv == nullptr)
     {
-        tg::rng rng;
-        rng.seed(get_seed());
-
         // build machine
         auto m = machine::build(*this, mFunctions);
 
@@ -968,7 +1046,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                 return false; // precondition violated, i.e. invalid trace
 
             // execute function (no invariants)
-            auto v = m.execute(f, args, false);
+            auto v = m.execute(f, args, false, op.seed);
 
             // print outputs
             if (print_mode)
@@ -984,10 +1062,6 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
     else // equivalence checker
     {
         auto const& e = *trace.equiv;
-
-        // seed rng
-        tg::rng rng;
-        rng.seed(get_seed());
 
         // prepare machines
         cc::vector<function*> funs_a;
@@ -1031,8 +1105,8 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
                 return false; // precondition violated, i.e. invalid trace
 
             // execute function
-            auto va = m_a.execute(f_a, args_a, false);
-            auto vb = m_b.execute(f_b, args_b, false);
+            auto va = m_a.execute(f_a, args_a, false, op.seed);
+            auto vb = m_b.execute(f_b, args_b, false, op.seed);
 
             // print outputs
             if (print_mode)
@@ -1090,7 +1164,7 @@ bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode
 
 void nx::MonteCarloTest::printSetup()
 {
-    LOG_INFO("registered functions:");
+    RICH_LOG("registered functions:");
     for (auto const& f : mFunctions)
     {
         cc::string s;
@@ -1106,7 +1180,7 @@ void nx::MonteCarloTest::printSetup()
         s += f.return_type.name();
         if (f.is_invariant)
             s += " [INVARIANT]";
-        LOG_INFO("  {}", s);
+        RICH_LOG("  {}", s);
     }
 }
 
@@ -1323,45 +1397,47 @@ int nx::MonteCarloTest::machine_trace::complexity() const
     return c;
 }
 
-void nx::MonteCarloTest::reproduceTrace(cc::span<int const> serialized_trace)
+void nx::MonteCarloTest::reproduceTrace(cc::span<int const> serialized_trace) { replayTrace(deserializeTrace(serialized_trace), true); }
+
+nx::MonteCarloTest::machine_trace nx::MonteCarloTest::deserializeTrace(cc::span<const int> serialized_trace)
 {
     machine_trace trace;
-    { // deserialize trace
-        auto pos = 0;
-        auto const get_int = [&] { return serialized_trace[pos++]; };
 
-        // equivalence and functions
-        auto eq_idx = get_int();
-        cc::vector<function*> funs;
-        if (eq_idx == -1)
-        {
-            for (auto& f : mFunctions)
-                funs.push_back(&f);
-        }
-        else
-        {
-            trace.equiv = &mEquivalences[eq_idx];
+    auto pos = 0;
+    auto const get_int = [&] { return serialized_trace[pos++]; };
 
-            cc::vector<function*> funs_b;
-            machine::build_equivalence_checker(*this, *trace.equiv, funs, funs_b);
-        }
+    // equivalence and functions
+    auto eq_idx = get_int();
+    cc::vector<function*> funs;
+    if (eq_idx == -1)
+    {
+        for (auto& f : mFunctions)
+            funs.push_back(&f);
+    }
+    else
+    {
+        trace.equiv = &mEquivalences[eq_idx];
 
-        // rest of trace
-        while (pos < int(serialized_trace.size()))
-        {
-            auto& op = trace.ops.emplace_back();
-            op.function_idx = get_int();
-            op.fun = funs[op.function_idx];
-            op.return_value_idx = get_int();
-            auto arity = get_int();
-            CC_ASSERT(arity == op.fun->arity() && "invalid trace");
-            op.args_start_idx = int(trace.arg_indices.size());
-            for (auto ai = 0; ai < arity; ++ai)
-                trace.arg_indices.push_back(get_int());
-        }
+        cc::vector<function*> funs_b;
+        machine::build_equivalence_checker(*this, *trace.equiv, funs, funs_b);
     }
 
-    replayTrace(trace, true);
+    // rest of trace
+    while (pos < int(serialized_trace.size()))
+    {
+        auto& op = trace.ops.emplace_back();
+        op.seed = get_int();
+        op.function_idx = get_int();
+        op.fun = funs[op.function_idx];
+        op.return_value_idx = get_int();
+        auto arity = get_int();
+        CC_ASSERT(arity == op.fun->arity() && "invalid trace");
+        op.args_start_idx = int(trace.arg_indices.size());
+        for (auto ai = 0; ai < arity; ++ai)
+            trace.arg_indices.push_back(get_int());
+    }
+
+    return trace;
 }
 
 cc::string nx::MonteCarloTest::machine_trace::serialize_to_string(MonteCarloTest const& test) const
@@ -1385,6 +1461,7 @@ cc::string nx::MonteCarloTest::machine_trace::serialize_to_string(MonteCarloTest
     // serialize ops
     for (auto const& op : ops)
     {
+        trace.push_back(op.seed);
         trace.push_back(op.function_idx);
         trace.push_back(op.return_value_idx);
         trace.push_back(op.fun->arity());

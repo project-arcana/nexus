@@ -22,29 +22,53 @@ args::args()
 
 args::args(cc::string app_name, cc::string app_desc) : _app_name(cc::move(app_name)), _app_desc(cc::move(app_desc)) {}
 
-args& args::disable_help()
+args& args::disable_help() &
 {
     _disable_help = true;
     return *this;
 }
 
-args& args::group(cc::string name)
+args&& args::disable_help() &&
+{
+    _disable_help = true;
+    return cc::move(*this);
+}
+
+args& args::group(cc::string name) &
 {
     _curr_group = cc::move(name);
     return *this;
 }
+args&& args::group(cc::string name) &&
+{
+    _curr_group = cc::move(name);
+    return cc::move(*this);
+}
 
-args& args::version(cc::string v)
+args& args::version(cc::string v) &
 {
     _version = cc::move(v);
     return *this;
 }
 
-args& args::validate(cc::string_view desc, cc::unique_function<bool()> validate_fun)
+args&& args::version(cc::string v) &&
+{
+    _version = cc::move(v);
+    return cc::move(*this);
+}
+
+args& args::validate(cc::string_view desc, cc::unique_function<bool()> validate_fun) &
 {
     CC_ASSERT(validate_fun.is_valid());
     _validators.push_back({desc, cc::move(validate_fun)});
     return *this;
+}
+
+args&& args::validate(cc::string_view desc, cc::unique_function<bool()> validate_fun) &&
+{
+    CC_ASSERT(validate_fun.is_valid());
+    _validators.push_back({desc, cc::move(validate_fun)});
+    return cc::move(*this);
 }
 
 bool args::parse()

@@ -98,12 +98,14 @@ struct nx::MonteCarloTest::machine
                     eq_funs.add(&f);
                 if (is_eq_a && !skip_a)
                 {
-                    CC_ASSERT(!eq_funs_by_type[e.type_a].contains_key(f.name.c_str()) && "functions checked for equivalence need unique names");
+                    CC_ASSERTF(!eq_funs_by_type[e.type_a].contains_key(f.name.c_str()),
+                               "functions checked for equivalence need unique names (duplicate function '%s')", f.name);
                     eq_funs_by_type[e.type_a][f.name.c_str()] = &f;
                 }
                 if (is_eq_b && !skip_b)
                 {
-                    CC_ASSERT(!eq_funs_by_type[e.type_b].contains_key(f.name.c_str()) && "functions checked for equivalence need unique names");
+                    CC_ASSERTF(!eq_funs_by_type[e.type_b].contains_key(f.name.c_str()),
+                               "functions checked for equivalence need unique names (duplicate function '%s')", f.name);
                     eq_funs_by_type[e.type_b][f.name.c_str()] = &f;
                 }
             }
@@ -193,6 +195,7 @@ struct nx::MonteCarloTest::machine
     }
     static machine build(MonteCarloTest const& test, cc::span<function*> funs)
     {
+        CC_ASSERT(cc::set<function*>(funs).size() == funs.size() && "duplicate function in machine::build");
         auto m = machine(&test);
 
         // reset functions

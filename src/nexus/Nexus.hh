@@ -16,6 +16,8 @@ public:
 private:
     cc::vector<cc::string> mSpecificTests;
     bool mPrintHelp = false;
+    bool mForceEndless = false;
+    cc::string mForceReproduction;
     int mTestArgC = 0;
     char const* const* mTestArgV = nullptr;
 };

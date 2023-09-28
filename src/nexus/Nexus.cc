@@ -7,6 +7,7 @@
 #include <nexus/detail/log.hh>
 #include <nexus/tests/Test.hh>
 
+#include <clean-core/from_string.hh>
 #include <clean-core/hash.hh>
 #include <clean-core/string_view.hh>
 #include <clean-core/unique_ptr.hh>
@@ -50,12 +51,25 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
     mTestArgC = argc - 1;
     mTestArgV = argv + 1;
 
+    auto i = 1;
     for (auto i = 1; i < argc; ++i)
     {
         auto s = cc::string_view(argv[i]);
 
         if (i == 1 && (s == "--help" || s == "-h"))
             mPrintHelp = true;
+
+        if (s == "--endless")
+            mForceEndless = true;
+
+        if (s == "--repr")
+        {
+            if (i + 1 < argc)
+            {
+                mForceReproduction = argv[i + 1];
+                ++i;
+            }
+        }
 
         if (s.empty() || s[0] == '-')
             continue; //  TODO
@@ -146,6 +160,19 @@ int nx::Nexus::run()
         if (!t->mSeedOverwritten)
             t->mSeed = seed;
 
+        if (mForceEndless)
+            t->mIsEndless = true;
+
+        if (!mForceReproduction.empty())
+        {
+            // TODO: make this via 2 different cmd line args instead
+            size_t s;
+            if (cc::from_string(mForceReproduction, s))
+                t->mReproduction = nx::reproduce(s);
+            else
+                t->mReproduction = nx::reproduce(mForceReproduction);
+        }
+
         tests_to_run.push_back(t.get());
     }
 
@@ -153,7 +180,7 @@ int nx::Nexus::run()
     RICH_LOG("run with '--help' for options");
     RICH_LOG("detected %s %s", tests.size(), tests.size() == 1 ? "test" : "tests");
     RICH_LOG("running %s %s%s", tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests",
-        disabled_tests == 0 ? "" : cc::format(" (%s disabled)", disabled_tests));
+             disabled_tests == 0 ? "" : cc::format(" (%s disabled)", disabled_tests));
     RICH_LOG("TEST(..., seed(%s))", seed);
     RICH_LOG("==============================================================================");
 
@@ -236,8 +263,8 @@ int nx::Nexus::run()
 
     RICH_LOG("==============================================================================");
     RICH_LOG("passed %d of %d %s in %.4f ms%s", //
-        tests_to_run.size() - num_failed_tests, tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests", total_time_ms,
-        num_failed_tests == 0 ? "" : cc::format(" (%d failed)", num_failed_tests));
+             tests_to_run.size() - num_failed_tests, tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests", total_time_ms,
+             num_failed_tests == 0 ? "" : cc::format(" (%d failed)", num_failed_tests));
     RICH_LOG("checked %d assertions%s", total_num_checks, total_num_failed_checks == 0 ? "" : cc::format(" (%d failed)", total_num_failed_checks));
 
     if (tests.empty())

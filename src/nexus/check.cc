@@ -12,6 +12,8 @@ bool nx::detail::report_failed_check(nx::detail::check_result const& r, const ch
     auto t = nx::detail::get_current_test();
     CC_ASSERT(t != nullptr && "CHECK(...) is only valid inside tests");
 
+    t->setFirstFailInfo(check, file, line, function);
+
     // log if not silenced
     if (!nx::detail::is_silenced())
     {

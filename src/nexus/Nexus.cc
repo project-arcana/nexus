@@ -7,6 +7,7 @@
 #include <nexus/detail/log.hh>
 #include <nexus/tests/Test.hh>
 
+#include <clean-core/defer.hh>
 #include <clean-core/from_string.hh>
 #include <clean-core/hash.hh>
 #include <clean-core/string_view.hh>
@@ -14,6 +15,8 @@
 
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <thread>
 
 #include <rich-log/log.hh>
@@ -30,6 +33,40 @@ nx::Test*& curr_test()
     thread_local static nx::Test* t = nullptr;
     return t;
 }
+
+cc::string to_timestamp(std::chrono::system_clock::time_point t)
+{
+    auto itt = std::chrono::system_clock::to_time_t(t);
+    std::ostringstream ss;
+    ss << std::put_time(gmtime(&itt), "%Y-%m-%dT%H:%M:%S");
+    return ss.str().c_str();
+}
+cc::string current_timestamp() { return to_timestamp(std::chrono::system_clock::now()); }
+
+cc::string repr_string_for(cc::string prefix, nx::Test const& t)
+{
+    cc::string repr;
+    if (t.shouldReproduce())
+    {
+        repr += prefix;
+        repr += "reproduce via TEST(..., reproduce(";
+        if (t.reproduction().trace.empty())
+            repr += cc::to_string(t.reproduction().seed);
+        else
+        {
+            repr += '"';
+            repr += t.reproduction().trace;
+            repr += '"';
+        }
+        repr += "))";
+    }
+    return repr;
+}
+}
+
+namespace nx
+{
+void write_xml_results(cc::string filename);
 }
 
 nx::App* nx::detail::get_current_app() { return curr_app(); }
@@ -71,6 +108,15 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
             }
         }
 
+        if (s == "--xml")
+        {
+            if (i + 1 < argc)
+            {
+                mXmlOutputFile = argv[i + 1];
+                ++i;
+            }
+        }
+
         if (s.empty() || s[0] == '-')
             continue; //  TODO
 
@@ -88,6 +134,9 @@ int nx::Nexus::run()
         RICH_LOG("");
         RICH_LOG("usage:");
         RICH_LOG(R"(  --help        shows this help)");
+        RICH_LOG(R"(  --endless     runs fuzz and mct tests in endless mode)");
+        RICH_LOG(R"(  --repr s      runs a test reproduction (i.e. similar to reproduce(s)))");
+        RICH_LOG(R"(  --xml file    writes the test results into the given file in JUnit xml style)");
         RICH_LOG(R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
         RICH_LOG("");
         RICH_LOG("stats:");
@@ -198,6 +247,7 @@ int nx::Nexus::run()
         detail::is_silenced() = t->mShouldFail;
         detail::always_terminate() = false;
 
+        auto const timestamp = current_timestamp();
         t->mFunctionBefore();
 
         // execute and measure
@@ -257,6 +307,7 @@ int nx::Nexus::run()
         // output
         auto const test_time_ms = std::chrono::duration<double>(end - start).count() * 1000;
         total_time_ms += test_time_ms;
+        t->setExecutionTime(timestamp, test_time_ms / 1000);
 
         RICH_LOG("  %<60s ... %6d checks in %.4f ms", t->name(), num_checks, test_time_ms);
     }
@@ -266,6 +317,12 @@ int nx::Nexus::run()
              tests_to_run.size() - num_failed_tests, tests_to_run.size(), tests_to_run.size() == 1 ? "test" : "tests", total_time_ms,
              num_failed_tests == 0 ? "" : cc::format(" (%d failed)", num_failed_tests));
     RICH_LOG("checked %d assertions%s", total_num_checks, total_num_failed_checks == 0 ? "" : cc::format(" (%d failed)", total_num_failed_checks));
+
+    CC_DEFER
+    {
+        if (!mXmlOutputFile.empty())
+            nx::write_xml_results(mXmlOutputFile);
+    };
 
     if (tests.empty())
     {
@@ -277,21 +334,7 @@ int nx::Nexus::run()
         for (auto const& t : tests)
             if (t->didFail() != t->shouldFail())
             {
-                cc::string repr;
-                if (t->shouldReproduce())
-                {
-                    repr += ", reproduce via TEST(..., reproduce(";
-                    if (t->reproduction().trace.empty())
-                        repr += cc::to_string(t->reproduction().seed);
-                    else
-                    {
-                        repr += '"';
-                        repr += t->reproduction().trace;
-                        repr += '"';
-                    }
-                    repr += "))";
-                }
-                RICH_LOG_WARN("test [%s] failed (seed %d%s)", t->name(), t->seed(), repr);
+                RICH_LOG_WARN("test [%s] failed (seed %d%s)", t->name(), t->seed(), repr_string_for(", ", *t));
                 RICH_LOG_WARN("  %s:%s", t->file(), t->line());
             }
 
@@ -320,4 +363,67 @@ int nx::Nexus::run()
 
         return EXIT_SUCCESS;
     }
+}
+
+void nx::write_xml_results(cc::string filename)
+{
+    // see https://github.com/testmoapp/junitxml
+    cc::string xml;
+
+    auto const timestamp = current_timestamp();
+
+    auto const& tests = detail::get_all_tests();
+
+    auto total_tests = 0;
+    auto total_errors = 0;   // aka abnormal executions
+    auto total_failures = 0; // aka failed check
+    auto total_skipped = 0;  // aka disabled
+    auto total_assertions = 0;
+    double total_time = 0;
+
+    for (auto const& t : tests)
+    {
+        ++total_tests;
+
+        if (!t->isEnabled())
+        {
+            ++total_skipped;
+            continue;
+        }
+
+        if (t->didFail() != t->shouldFail())
+            ++total_failures;
+
+        total_assertions += t->numberOfChecks();
+        total_time += t->executionTimeInSec();
+    }
+
+    xml += R"(<?xml version="1.0" encoding="UTF-8"?>)";
+    xml += cc::format(R"(<testsuites name="Test run" tests="%s" failures="%s" errors="%s" skipped="%s" assertions="%s" time="%.5f" timestamp="%s">)",
+                      total_tests, total_failures, 0, total_skipped, total_assertions, total_time, timestamp);
+    xml += cc::format(R"(<testsuite name="Test run" tests="%s" failures="%s" errors="%s" skipped="%s" assertions="%s" time="%.5f" timestamp="%s">)",
+                      total_tests, total_failures, 0, total_skipped, total_assertions, total_time, timestamp);
+    for (auto const& t : tests)
+    {
+        xml += cc::format(R"(<testcase name="%s" assertions="%s" time="%.5f" file="%s" line="%s">)", t->name(), t->numberOfChecks(), t->executionTimeInSec(),
+                          t->file(), t->line());
+        if (!t->isEnabled())
+        {
+            xml += R"(<skipped message="Test is disabled" />)";
+        }
+        else if (t->didFail() && !t->shouldFail())
+        {
+            xml += cc::format(R"(<failure message="%s">%s</failure>)", t->makeFirstFailMessage(), t->makeFirstFailInfo());
+        }
+        else if (!t->didFail() && t->shouldFail())
+        {
+            xml += R"(<failure message="Test did not fail but was marked as should_fail."></failure>)";
+        }
+        xml += R"(</testcase>)";
+    }
+    xml += R"(</testsuite>)";
+    xml += R"(</testsuites>)";
+
+    std::ofstream(filename.c_str()) << xml.c_str();
+    LOG("wrote xml result to '%s'", filename);
 }

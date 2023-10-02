@@ -19,6 +19,9 @@ void nx::detail::overwrite_assertion_handlers()
         nx::detail::number_of_assertions()++;
         nx::detail::number_of_failed_assertions()++;
 
+        if (auto t = nx::detail::get_current_test())
+            t->setFirstFailInfo(info.expr, info.file, info.line, info.func);
+
         if (!nx::detail::is_silenced())
         {
             fflush(stdout);

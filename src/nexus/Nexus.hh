@@ -18,6 +18,7 @@ private:
     bool mPrintHelp = false;
     bool mForceEndless = false;
     cc::string mForceReproduction;
+    cc::string mXmlOutputFile;
     int mTestArgC = 0;
     char const* const* mTestArgV = nullptr;
 };

@@ -42,6 +42,12 @@ public:
 
     bool didFail() const { return mDidFail; }
 
+    int numberOfChecks() const { return mCounters->num_checks; }
+    int numberOfFailedChecks() const { return mCounters->num_failed_checks; }
+
+    double executionTimeInSec() const { return mExecutionTimeInSec; }
+    cc::string const& executionTimestamp() const { return mExecutionTimestamp; }
+
     // methods
 public:
     void setExclusive() { mIsExclusive = true; }
@@ -63,7 +69,18 @@ public:
 
     void setDidFail(bool didFail) { mDidFail = didFail; }
 
+    void setExecutionTime(cc::string timestamp, double timeInSec)
+    {
+        mExecutionTimestamp = timestamp;
+        mExecutionTimeInSec = timeInSec;
+    }
+
     cc::string makeCurrentReproductionCommand() const;
+
+    void setFirstFailInfo(const char* check, const char* file, int line, char const* function);
+
+    cc::string makeFirstFailInfo() const;
+    cc::string makeFirstFailMessage() const;
 
     // ctor
 public:
@@ -98,6 +115,14 @@ private:
     bool mIsEnabled = true;
     bool mIsDebug = false;
     bool mIsVerbose = false;
+
+    cc::string mFirstFailMessage;
+    cc::string mFirstFailFile;
+    cc::string mFirstFailFunction;
+    int mFirstFailLine = 0;
+
+    double mExecutionTimeInSec = 0;
+    cc::string mExecutionTimestamp;
 
     int mArgC = 0;
     char const* const* mArgV = nullptr;

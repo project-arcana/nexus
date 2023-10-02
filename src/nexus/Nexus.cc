@@ -398,6 +398,36 @@ void nx::write_xml_results(cc::string filename)
         total_time += t->executionTimeInSec();
     }
 
+    auto escapeXmlString = [](cc::string name) -> cc::string
+    {
+        cc::string s;
+        for (auto c : name)
+        {
+            switch (c)
+            {
+            case '<':
+                s += "&lt;";
+                break;
+            case '>':
+                s += "&gt;";
+                break;
+            case '&':
+                s += "&amp;";
+                break;
+            case '"':
+                s += "&quot;";
+                break;
+            case '\'':
+                s += "&apos;";
+                break;
+
+            default:
+                s += c;
+            }
+        }
+        return s;
+    };
+
     xml += R"(<?xml version="1.0" encoding="UTF-8"?>)";
     xml += cc::format(R"(<testsuites name="Test run" tests="%s" failures="%s" errors="%s" skipped="%s" assertions="%s" time="%.5f" timestamp="%s">)",
                       total_tests, total_failures, 0, total_skipped, total_assertions, total_time, timestamp);
@@ -405,15 +435,15 @@ void nx::write_xml_results(cc::string filename)
                       total_tests, total_failures, 0, total_skipped, total_assertions, total_time, timestamp);
     for (auto const& t : tests)
     {
-        xml += cc::format(R"(<testcase name="%s" assertions="%s" time="%.5f" file="%s" line="%s">)", t->name(), t->numberOfChecks(), t->executionTimeInSec(),
-                          t->file(), t->line());
+        xml += cc::format(R"(<testcase name="%s" assertions="%s" time="%.5f" file="%s" line="%s">)", escapeXmlString(t->name()), t->numberOfChecks(),
+                          t->executionTimeInSec(), escapeXmlString(t->file()), t->line());
         if (!t->isEnabled())
         {
             xml += R"(<skipped message="Test is disabled" />)";
         }
         else if (t->didFail() && !t->shouldFail())
         {
-            xml += cc::format(R"(<failure message="%s">%s</failure>)", t->makeFirstFailMessage(), t->makeFirstFailInfo());
+            xml += cc::format(R"(<failure message="%s">%s</failure>)", escapeXmlString(t->makeFirstFailMessage()), escapeXmlString(t->makeFirstFailInfo()));
         }
         else if (!t->didFail() && t->shouldFail())
         {

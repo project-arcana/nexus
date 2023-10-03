@@ -16,6 +16,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <thread>
 
@@ -67,6 +68,7 @@ cc::string repr_string_for(cc::string prefix, nx::Test const& t)
 namespace nx
 {
 void write_xml_results(cc::string filename);
+void write_xml_results_sentinel(cc::string filename);
 }
 
 nx::App* nx::detail::get_current_app() { return curr_app(); }
@@ -174,6 +176,10 @@ int nx::Nexus::run()
         }
         return EXIT_SUCCESS;
     }
+
+    // already write a dummy xml so a crash in nexus will be discovered
+    if (!mXmlOutputFile.empty())
+        nx::write_xml_results_sentinel(mXmlOutputFile);
 
     // tests
     auto const& tests = detail::get_all_tests();
@@ -456,4 +462,23 @@ void nx::write_xml_results(cc::string filename)
 
     std::ofstream(filename.c_str()) << xml.c_str();
     LOG("wrote xml result to '%s'", filename);
+}
+
+void nx::write_xml_results_sentinel(cc::string filename)
+{
+    // see https://github.com/testmoapp/junitxml
+    cc::string xml;
+
+    auto const timestamp = current_timestamp();
+
+    xml += R"(<?xml version="1.0" encoding="UTF-8"?>)";
+    xml += cc::format(R"(<testsuites name="Test run" tests="1" failures="0" errors="1" skipped="0" assertions="1" time="0.0" timestamp="%s">)", timestamp);
+    xml += cc::format(R"(<testsuite name="Test run" tests="1" failures="0" errors="1" skipped="0" assertions="1" time="0.0" timestamp="%s">)", timestamp);
+    xml += R"(<testcase name="Dummy Test Case" assertions="1" time="0" file="does-not-exist.cc" line="1">)";
+    xml += R"(<failure message="Nexus did not run until real xml was written. This indicates a hard crash inside the test framework."></failure>)";
+    xml += R"(</testcase>)";
+    xml += R"(</testsuite>)";
+    xml += R"(</testsuites>)";
+
+    std::ofstream(filename.c_str()) << xml.c_str();
 }

@@ -195,7 +195,24 @@ struct nx::MonteCarloTest::machine
     }
     static machine build(MonteCarloTest const& test, cc::span<function*> funs)
     {
-        CC_ASSERT(cc::set<function*>(funs).size() == funs.size() && "duplicate function in machine::build");
+        auto const get_duplicate_fun_names = [&]() -> cc::string
+        {
+            cc::string res;
+            auto cnts = cc::map<function*, int>();
+            for (auto f : funs)
+                cnts[f]++;
+            for (auto [f, c] : cnts)
+                if (c > 1)
+                {
+                    if (!res.empty())
+                        res += ", ";
+                    res += "'";
+                    res += f->name;
+                    res += "'";
+                }
+            return res;
+        };
+        CC_ASSERTF(cc::set<function*>(funs).size() == funs.size(), "duplicate function in machine::build: %s", get_duplicate_fun_names());
         auto m = machine(&test);
 
         // reset functions
@@ -728,7 +745,7 @@ void nx::MonteCarloTest::tryExecuteMachineNormally(machine_trace& trace, size_t 
                 }
 
                 if (f_b->precondition)
-                    CC_ASSERT(f_b->precondition(args_b) && "first precondition was true but second was not");
+                    CC_ASSERTF(f_b->precondition(args_b), "first precondition was true but second was not (of '%s')", f_b->name);
             };
             auto const bi_execution = [this, &m_a, &m_b, &e, &add_trace](tg::rng& rng, function* f_a, function* f_b, cc::span<value*> args_a,
                                                                          cc::span<value*> args_b, cc::span<int> arg_indices)

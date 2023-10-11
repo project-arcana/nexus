@@ -90,7 +90,6 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
     mTestArgC = argc - 1;
     mTestArgV = argv + 1;
 
-    auto i = 1;
     for (auto i = 1; i < argc; ++i)
     {
         auto s = cc::string_view(argv[i]);

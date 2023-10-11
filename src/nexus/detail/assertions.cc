@@ -27,6 +27,8 @@ void nx::detail::overwrite_assertion_handlers()
             fflush(stdout);
 
             fprintf(stderr, "assertion `%s' failed.\n", info.expr);
+            if constexpr (std::is_same_v<std::decay_t<decltype(info)>, cc::detail::assertion_info>)
+                fprintf(stderr, "  ---\n%s\n  ---\n", info.msg);
             fprintf(stderr, "  in %s\n", info.func);
             fprintf(stderr, "  file %s:%d\n", info.file, info.line);
             fflush(stderr);

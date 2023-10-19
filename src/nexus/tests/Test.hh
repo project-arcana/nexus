@@ -60,6 +60,7 @@ public:
     void setMonteCarloTest(MonteCarloTest* mct) { mMCT = mct; }
     void addAfterPattern(cc::string pattern) { mAfterPatterns.push_back(cc::move(pattern)); }
     void addBeforePattern(cc::string pattern) { mBeforePatterns.push_back(cc::move(pattern)); }
+    void addOptInGroup(cc::string name) { mOptInGroups.push_back(cc::move(name)); }
 
     void overwriteSeed(size_t s)
     {
@@ -133,6 +134,7 @@ private:
 
     cc::vector<cc::string> mAfterPatterns;
     cc::vector<cc::string> mBeforePatterns;
+    cc::vector<cc::string> mOptInGroups;
 
     friend class Nexus;
     friend class MonteCarloTest;

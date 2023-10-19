@@ -15,6 +15,7 @@ public:
 
 private:
     cc::vector<cc::string> mSpecificTests;
+    cc::vector<cc::string> mEnabledGroups;
     bool mPrintHelp = false;
     bool mForceEndless = false;
     cc::string mForceReproduction;

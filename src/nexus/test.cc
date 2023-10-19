@@ -65,6 +65,8 @@ void detail::configure(Test* t, const debug_t&) { t->setDebug(); }
 
 void detail::configure(Test* t, const verbose_t&) { t->setVerbose(); }
 
+void detail::configure(Test* t, const opt_in_group& g) { t->addOptInGroup(g.name); }
+
 void nx::print_current_test_reproduction()
 {
     auto t = nx::detail::get_current_test();

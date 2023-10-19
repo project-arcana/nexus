@@ -21,6 +21,14 @@ struct after
     char const* pattern;
 };
 
+/// only executes the test if cmd line arg "--group name" is passed
+struct opt_in_group
+{
+    char const* name;
+
+    explicit opt_in_group(char const* name) : name(name) {}
+};
+
 /// this test is not run concurrently with any other test (for multi-threaded execution)
 static constexpr struct exclusive_t
 {

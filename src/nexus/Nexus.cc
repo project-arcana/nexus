@@ -109,6 +109,15 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
             }
         }
 
+        if (s == "--group" || s == "-g")
+        {
+            if (i + 1 < argc)
+            {
+                mEnabledGroups.push_back(argv[i + 1]);
+                ++i;
+            }
+        }
+
         if (s == "--xml")
         {
             if (i + 1 < argc)
@@ -203,6 +212,16 @@ int nx::Nexus::run()
             for (auto const& s : mSpecificTests)
                 if (s == t->name())
                     do_run = true;
+        }
+
+        if (!t->mOptInGroups.empty())
+        {
+            auto enabled = false;
+            for (auto const& g : mEnabledGroups)
+                if (t->mOptInGroups.contains(g))
+                    enabled = true;
+            if (!enabled)
+                do_run = false;
         }
 
         if (!do_run)

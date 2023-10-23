@@ -206,14 +206,6 @@ int nx::Nexus::run()
         if (!t->isEnabled())
             do_run = false;
 
-        if (!mSpecificTests.empty())
-        {
-            do_run = false;
-            for (auto const& s : mSpecificTests)
-                if (s == t->name())
-                    do_run = true;
-        }
-
         if (!t->mOptInGroups.empty())
         {
             auto enabled = false;
@@ -222,6 +214,15 @@ int nx::Nexus::run()
                     enabled = true;
             if (!enabled)
                 do_run = false;
+        }
+
+        // AFTER opt-in groups, so you can still selectively run them
+        if (!mSpecificTests.empty())
+        {
+            do_run = false;
+            for (auto const& s : mSpecificTests)
+                if (s == t->name())
+                    do_run = true;
         }
 
         if (!do_run)

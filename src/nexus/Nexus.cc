@@ -400,7 +400,7 @@ void nx::write_xml_results(cc::string filename)
     auto const& tests = detail::get_all_tests();
 
     auto total_tests = 0;
-    auto total_errors = 0;   // aka abnormal executions
+    [[maybe_unused]] auto total_errors = 0;   // aka abnormal executions
     auto total_failures = 0; // aka failed check
     auto total_skipped = 0;  // aka disabled
     auto total_assertions = 0;

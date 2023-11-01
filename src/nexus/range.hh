@@ -30,7 +30,7 @@ struct range
     size_t size() const { return _size; }
 
     template <class Range>
-    bool operator==(Range const& rhs) const
+    bool content_equals(Range const& rhs) const
     {
         size_t i = 0;
         for (auto const& v : rhs)
@@ -49,28 +49,21 @@ struct range
 
         return i == _size;
     }
-    template <class Range>
-    bool operator!=(Range const& rhs) const
-    {
-        return !operator==(rhs);
-    }
 
 private:
     T const* _data;
     size_t _size;
 };
 
-// C++20's rewrite rules makes this ambiguous
-#if __cplusplus < 202002L
 template <class Range, class T>
 bool operator==(Range const& lhs, range<T> const& rhs)
 {
-    return rhs.operator==(lhs);
+    return rhs.content_equals(lhs);
 }
 template <class Range, class T>
 bool operator!=(Range const& lhs, range<T> const& rhs)
 {
-    return rhs.operator!=(lhs);
+    return !rhs.content_equals(lhs);
 }
-#endif
+
 }

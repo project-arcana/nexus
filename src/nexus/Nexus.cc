@@ -12,6 +12,7 @@
 #include <clean-core/hash.hh>
 #include <clean-core/string_view.hh>
 #include <clean-core/unique_ptr.hh>
+#include <clean-core/utility.hh>
 
 #include <chrono>
 #include <cstdlib>
@@ -176,7 +177,7 @@ int nx::Nexus::run()
     {
         for (auto const& a : apps_to_run)
         {
-            a->mArgC = mTestArgC - 1;
+            a->mArgC = cc::max(mTestArgC - 1, 0);
             a->mArgV = mTestArgV + 1;
             curr_app() = a;
             a->function()(); // execute app
@@ -199,7 +200,7 @@ int nx::Nexus::run()
     auto disabled_tests = 0;
     for (auto const& t : tests)
     {
-        t->mArgC = mTestArgC - 1;
+        t->mArgC = cc::max(mTestArgC - 1, 0);
         t->mArgV = mTestArgV + 1;
         auto do_run = true;
 

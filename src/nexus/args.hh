@@ -118,26 +118,22 @@ public:
         a.register_var_parse(v);
         return cc::move(*this);
     }
-    template <class T>
     args& add_positional(char metavar, cc::string desc) &
     {
         add_pos_arg(metavar, cc::move(desc));
         return *this;
     }
-    template <class T>
     args&& add_positional(char metavar, cc::string desc) &&
     {
         add_pos_arg(metavar, cc::move(desc));
         return cc::move(*this);
     }
-    template <class T>
     args& add_positional_variadic(char metavar, cc::string desc) &
     {
         auto& a = add_pos_arg(metavar, cc::move(desc));
         a.variadic = true;
         return *this;
     }
-    template <class T>
     args&& add_positional_variadic(char metavar, cc::string desc) &&
     {
         auto& a = add_pos_arg(metavar, cc::move(desc));

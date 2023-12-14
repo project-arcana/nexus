@@ -3,6 +3,7 @@
 #include <clean-core/macros.hh>
 
 #include <nexus/detail/api.hh>
+#include <nexus/detail/enable_static_libraries_helper.hh>
 
 #include "check.hh"
 #include "config.hh"
@@ -58,6 +59,7 @@
                                                                                                                                                        \
         _nx_register##function()                                                                                                                       \
         {                                                                                                                                              \
+            nx::g_enable_static_libraries++;                                                                                                           \
             using namespace nx;                                                                                                                        \
             ::nx::detail::build_test(__FILE__, __LINE__, #function, &function##_run, &function##_before, &function##_after, &m_counters, __VA_ARGS__); \
         }                                                                                                                                              \

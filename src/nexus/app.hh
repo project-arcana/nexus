@@ -4,6 +4,7 @@
 
 #include <nexus/args.hh>
 #include <nexus/detail/api.hh>
+#include <nexus/detail/enable_static_libraries_helper.hh>
 
 #include "fwd.hh"
 
@@ -36,6 +37,7 @@
     {                                                                                       \
         _nx_register##function()                                                            \
         {                                                                                   \
+            nx::g_enable_static_libraries++;                                                \
             using namespace nx;                                                             \
             ::nx::detail::build_app(__FILE__, __LINE__, #function, &function, __VA_ARGS__); \
         }                                                                                   \

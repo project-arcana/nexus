@@ -504,6 +504,14 @@ nx::MonteCarloTest::MonteCarloTest()
 
 void nx::MonteCarloTest::execute()
 {
+    if (mExecuteExecuter)
+        mExecuteExecuter([this] { implExecute(); });
+    else
+        implExecute();
+}
+
+void nx::MonteCarloTest::implExecute()
+{
     machine_trace trace;
     mCurrentTrace = &trace;
     CC_DEFER { mCurrentTrace = nullptr; };

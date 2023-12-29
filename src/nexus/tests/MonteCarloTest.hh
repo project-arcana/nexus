@@ -91,6 +91,9 @@ public:
         mTypeMetadata[std::type_index(typeid(T))].to_string = [f = cc::move(f)](void* p) { return f(*static_cast<T const*>(p)); };
     }
 
+    // allows wrapping a scope around the actual MCT execute
+    void setExecuteWrapper(cc::unique_function<void(cc::unique_function<void()>)> fun) { mExecuteExecuter = cc::move(fun); }
+
     MonteCarloTest();
     MonteCarloTest(MonteCarloTest const&) = delete;
     MonteCarloTest& operator=(MonteCarloTest const&) = delete;
@@ -103,6 +106,8 @@ public:
 
     // impls
 private:
+    void implExecute();
+
     void tryExecuteMachineNormally(machine_trace& trace, size_t seed);
 
     void minimizeTrace(machine_trace& trace);
@@ -429,6 +434,8 @@ private:
     cc::vector<equivalence> mEquivalences;
 
     cc::vector<cc::string> mFixedReproductions;
+
+    cc::unique_function<void(cc::unique_function<void()>)> mExecuteExecuter;
 
     machine_trace* mCurrentTrace = nullptr;
 

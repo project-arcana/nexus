@@ -100,6 +100,9 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
         if (s == "--endless")
             mForceEndless = true;
 
+        if (s == "--no-endless")
+            mNoEndless = true;
+
         if (s == "--repr")
         {
             if (i + 1 < argc)
@@ -145,6 +148,7 @@ int nx::Nexus::run()
         RICH_LOG("usage:");
         RICH_LOG(R"(  --help        shows this help)");
         RICH_LOG(R"(  --endless     runs fuzz and mct tests in endless mode)");
+        RICH_LOG(R"(  --no-endless  errors if any test would be run in endless mode (useful for CI))");
         RICH_LOG(R"(  --repr s      runs a test reproduction (i.e. similar to reproduce(s)))");
         RICH_LOG(R"(  --xml file    writes the test results into the given file in JUnit xml style)");
         RICH_LOG(R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
@@ -236,6 +240,12 @@ int nx::Nexus::run()
 
         if (mForceEndless)
             t->mIsEndless = true;
+
+        if (t->mIsEndless && mNoEndless)
+        {
+            LOG_ERROR("test '%s' would be run in endless more but --no-endless is specified", t->name());
+            return EXIT_FAILURE;
+        }
 
         if (!mForceReproduction.empty())
         {
@@ -400,9 +410,9 @@ void nx::write_xml_results(cc::string filename)
     auto const& tests = detail::get_all_tests();
 
     auto total_tests = 0;
-    [[maybe_unused]] auto total_errors = 0;   // aka abnormal executions
-    auto total_failures = 0; // aka failed check
-    auto total_skipped = 0;  // aka disabled
+    [[maybe_unused]] auto total_errors = 0; // aka abnormal executions
+    auto total_failures = 0;                // aka failed check
+    auto total_skipped = 0;                 // aka disabled
     auto total_assertions = 0;
     double total_time = 0;
 

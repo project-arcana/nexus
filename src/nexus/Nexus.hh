@@ -18,6 +18,7 @@ private:
     cc::vector<cc::string> mEnabledGroups;
     bool mPrintHelp = false;
     bool mForceEndless = false;
+    bool mNoEndless = false;
     cc::string mForceReproduction;
     cc::string mXmlOutputFile;
     int mTestArgC = 0;

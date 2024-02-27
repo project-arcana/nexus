@@ -22,6 +22,11 @@
 
 #include <rich-log/log.hh>
 
+#define SCOL_GRAY "\u001b[38;5;244m"
+#define SCOL_ORANGE "\u001b[38;5;220m"
+#define SCOL_RED "\u001b[38;5;196m"
+#define SCOL_RESET "\u001b[0m"
+
 namespace
 {
 nx::App*& curr_app()
@@ -43,6 +48,20 @@ cc::string to_timestamp(std::chrono::system_clock::time_point t)
     return ss.str().c_str();
 }
 cc::string current_timestamp() { return to_timestamp(std::chrono::system_clock::now()); }
+
+cc::string colored_test_time_str(double time_ms)
+{
+    auto s = cc::format("%7.2f ms", time_ms);
+    if (time_ms < 10)
+        s = SCOL_GRAY + s + SCOL_RESET;
+    else if (time_ms < 100)
+        s = SCOL_RESET + s;
+    else if (time_ms < 1000)
+        s = SCOL_ORANGE + s + SCOL_RESET;
+    else
+        s = SCOL_RED + s + SCOL_RESET;
+    return s;
+}
 
 cc::string repr_string_for(cc::string prefix, nx::Test const& t)
 {
@@ -344,7 +363,8 @@ int nx::Nexus::run()
         total_time_ms += test_time_ms;
         t->setExecutionTime(timestamp, test_time_ms / 1000);
 
-        RICH_LOG("  %<60s ... %6d checks in %.4f ms", t->name(), num_checks, test_time_ms);
+        RICH_LOG("  %<60s " SCOL_GRAY "... " SCOL_RESET "%7d" SCOL_GRAY " checks in %s", //
+                 t->name(), num_checks, colored_test_time_str(test_time_ms));
     }
 
     RICH_LOG("==============================================================================");

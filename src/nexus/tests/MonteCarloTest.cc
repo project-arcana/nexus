@@ -8,6 +8,7 @@
 #include <clean-core/assertf.hh>
 #include <clean-core/defer.hh>
 #include <clean-core/demangle.hh>
+#include <clean-core/indices_of.hh>
 #include <clean-core/map.hh>
 #include <clean-core/pair.hh>
 #include <clean-core/set.hh>
@@ -580,12 +581,7 @@ void nx::MonteCarloTest::implExecute()
     nx::detail::always_terminate() = true;
     nx::detail::overwrite_assertion_handlers();
 
-    // first: try normal execution
-    try
-    {
-        runMCT();
-    }
-    catch (nx::detail::assertion_failed_exception const&)
+    auto const handle_mct_fail = [&]
     {
         // on fail: try to minimize trace
         RICH_LOG_ERROR("MONTE_CARLO_TEST failed. Trying to generate minimal reproduction.");
@@ -602,6 +598,20 @@ void nx::MonteCarloTest::implExecute()
         replayTrace(trace, true);
         fflush(stdout);
         fflush(stderr);
+    };
+
+    // first: try normal execution
+    try
+    {
+        runMCT();
+    }
+    catch (nx::detail::assertion_failed_exception const&)
+    {
+        handle_mct_fail();
+    }
+    catch (std::exception const&)
+    {
+        handle_mct_fail();
     }
 
     nx::detail::always_terminate() = false;
@@ -878,7 +888,7 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
 
     while (found_smaller) // TODO: time limit
     {
-        RICH_LOG_ERROR("  .. trace complexity {}", trace.complexity());
+        RICH_LOG_ERROR("  .. trace complexity {} ({} ops)", trace.complexity(), trace.ops.size());
         auto opts = trace.build_minimizer();
 
         found_smaller = false;
@@ -894,6 +904,12 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
                 replayTrace(new_t);
             }
             catch (nx::detail::assertion_failed_exception const&)
+            {
+                // found a smaller failing test
+                trace = new_t;
+                found_smaller = true;
+            }
+            catch (std::exception const&)
             {
                 // found a smaller failing test
                 trace = new_t;
@@ -1288,7 +1304,7 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
     auto can_disable_fun = cc::array<bool>::defaulted(ops.size());
 
     // try disabling functions
-    auto disable_cnt = 0;
+    cc::vector<int> disableable_ops;
     for (int i = 0; i < int(ops.size()); ++i)
     {
         auto const& op = ops[i];
@@ -1312,24 +1328,113 @@ nx::minimize_options<nx::MonteCarloTest::machine_trace> nx::MonteCarloTest::mach
 
         can_disable_fun[i] = can_disable;
         if (can_disable)
-            ++disable_cnt;
+            disableable_ops.push_back(i);
+    }
+
+    // compute "leaf" functions (whose result dont affect downstream ops)
+    cc::vector<int> leaf_ops;
+    for (int i = 0; i < int(ops.size()); ++i)
+    {
+        auto const& op = ops[i];
+
+        auto is_leaf = true;
+
+        // result is read downstream?
+        if (op.return_value_idx >= 0 && varsets.get(op.fun->return_type).vars[op.return_value_idx].last_read > i)
+            is_leaf = false;
+
+        // a modified arg is used downstream
+        for (auto ai = 0; ai < op.fun->arity(); ++ai)
+            if (op.fun->arg_types_could_change[ai])
+            {
+                auto& vs = varsets.get(op.fun->arg_types[ai]);
+                auto idx = arg_indices[op.args_start_idx + ai];
+
+                if (vs.vars[idx].last_read > i)
+                    is_leaf = false;
+            }
+
+        if (is_leaf)
+        {
+            CC_ASSERT(can_disable_fun[i]);
+            leaf_ops.push_back(i);
+        }
     }
 
     // exponential disable
-    if (disable_cnt > 10)
+    if (disableable_ops.size() > 10)
     {
         auto seed = get_seed() + complexity();
+
+        // 50% optimistic version
         min.options.emplace_back(
-            [can_disable_fun, seed](machine_trace const& old_t)
+            [seed, disableable_ops](machine_trace const& old_t) mutable
             {
+                // decide which ops to disable
                 tg::rng rng;
-                rng.seed(seed);
+                rng.seed(seed + 9123);
+                auto const target_cnt = disableable_ops.size() / 2;
+                while (disableable_ops.size() > target_cnt)
+                    disableable_ops.remove_at_unordered(uniform(rng, 0, int(disableable_ops.size() - 1)));
+                auto const to_disable = cc::set<int>(disableable_ops);
+
+                // build new trace with all BUT the disabled ops
                 auto t = old_t;
                 t.ops.clear();
-                for (auto i = 0; i < int(old_t.ops.size()); ++i)
-                    if (!can_disable_fun[i] || tg::uniform<bool>(rng))
+                for (auto i : cc::indices_of(old_t.ops))
+                    if (!to_disable.contains(i))
                         t.ops.push_back(old_t.ops[i]);
-                t.ops.pop_back();
+
+                return t;
+            });
+
+        // 10% pessimistic version
+        min.options.emplace_back(
+            [seed, disableable_ops](machine_trace const& old_t) mutable
+            {
+                // decide which ops to disable
+                tg::rng rng;
+                rng.seed(seed + 591231);
+                auto const target_cnt = disableable_ops.size() / 10;
+                while (disableable_ops.size() > target_cnt)
+                    disableable_ops.remove_at_unordered(uniform(rng, 0, int(disableable_ops.size() - 1)));
+                auto const to_disable = cc::set<int>(disableable_ops);
+
+                // build new trace with all BUT the disabled ops
+                auto t = old_t;
+                t.ops.clear();
+                for (auto i : cc::indices_of(old_t.ops))
+                    if (!to_disable.contains(i))
+                        t.ops.push_back(old_t.ops[i]);
+
+                return t;
+            });
+    }
+
+    // exponential leaf pruning
+    if (leaf_ops.size() > 10)
+    {
+        auto seed = get_seed() + complexity();
+
+        // 50% optimistic version
+        min.options.emplace_back(
+            [seed, leaf_ops](machine_trace const& old_t) mutable
+            {
+                // decide which ops to remove
+                tg::rng rng;
+                rng.seed(seed + 9123);
+                auto const target_cnt = leaf_ops.size() / 2;
+                while (leaf_ops.size() > target_cnt)
+                    leaf_ops.remove_at_unordered(uniform(rng, 0, int(leaf_ops.size() - 1)));
+                auto const to_remove = cc::set<int>(leaf_ops);
+
+                // build new trace with all BUT the removed ops
+                auto t = old_t;
+                t.ops.clear();
+                for (auto i : cc::indices_of(old_t.ops))
+                    if (!to_remove.contains(i))
+                        t.ops.push_back(old_t.ops[i]);
+
                 return t;
             });
     }

@@ -117,7 +117,7 @@ private:
 
     /// tries to replace a trace
     /// returns false if trace is invalid (e.g. violates a precondition)
-    bool replayTrace(machine_trace const& trace, bool print_mode = false);
+    bool replayTrace(machine_trace const& trace, bool print_mode);
 
     template <class F, class R, class A, class B>
     void implTestEquivalence(F&& test, detail::signature<R(A, B)>)

@@ -901,7 +901,7 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
             try
             {
                 // try new trace
-                replayTrace(new_t);
+                replayTrace(new_t, false);
             }
             catch (nx::detail::assertion_failed_exception const&)
             {
@@ -1533,7 +1533,15 @@ int nx::MonteCarloTest::machine_trace::complexity() const
     return c;
 }
 
-void nx::MonteCarloTest::reproduceTrace(cc::span<int const> serialized_trace) { replayTrace(deserializeTrace(serialized_trace), true); }
+void nx::MonteCarloTest::reproduceTrace(cc::span<int const> serialized_trace)
+{
+    auto trace = deserializeTrace(serialized_trace);
+
+    mCurrentTrace = &trace;
+    CC_DEFER { mCurrentTrace = nullptr; };
+
+    replayTrace(trace, true);
+}
 
 nx::MonteCarloTest::machine_trace nx::MonteCarloTest::deserializeTrace(cc::span<const int> serialized_trace)
 {

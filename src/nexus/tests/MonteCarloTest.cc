@@ -922,7 +922,10 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
 bool nx::MonteCarloTest::replayTrace(machine_trace const& trace, bool print_mode)
 {
     if (print_mode)
+    {
         RICH_LOG_ERROR("=============== TRACE BEGIN ===============");
+        RICH_LOG_ERROR("MONTE_CARLO_TEST(..., %s)", nx::detail::get_current_test()->makeCurrentReproductionCommand());
+    }
     CC_DEFER
     {
         if (print_mode)

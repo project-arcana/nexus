@@ -179,6 +179,9 @@ int nx::Nexus::run()
             t->function()();
         else
         {
+#if defined(CC_COMPILER_MSVC) && !defined(_CPPUNWIND)
+            t->function()();
+#else
             try
             {
                 t->function()();
@@ -187,6 +190,7 @@ int nx::Nexus::run()
             {
                 // empty by design
             }
+#endif
         }
         auto const end = std::chrono::high_resolution_clock::now();
 

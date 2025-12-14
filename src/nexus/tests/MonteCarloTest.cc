@@ -553,6 +553,9 @@ void nx::MonteCarloTest::execute()
     nx::detail::overwrite_assertion_handlers();
 
     // first: try normal execution
+#if defined(CC_COMPILER_MSVC) && !defined(_CPPUNWIND)
+    runMCT();
+#else
     try
     {
         runMCT();
@@ -575,6 +578,7 @@ void nx::MonteCarloTest::execute()
         fflush(stdout);
         fflush(stderr);
     }
+#endif
 
     nx::detail::always_terminate() = false;
     nx::detail::reset_assertion_handlers();
@@ -860,6 +864,10 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
             auto new_t = opts.get_next_option_for(trace);
             CC_ASSERT(new_t.complexity() < trace.complexity() && "operation did not reduce complexity");
 
+#if defined(CC_COMPILER_MSVC) && !defined(_CPPUNWIND)
+            // try new trace
+            replayTrace(new_t);
+#else
             try
             {
                 // try new trace
@@ -871,6 +879,7 @@ void nx::MonteCarloTest::minimizeTrace(machine_trace& trace)
                 trace = new_t;
                 found_smaller = true;
             }
+#endif
         }
     }
 }

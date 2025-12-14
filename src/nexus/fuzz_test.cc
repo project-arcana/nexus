@@ -59,6 +59,9 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
             f(rng);
         else
         {
+#if defined(CC_COMPILER_MSVC) && !defined(_CPPUNWIND)
+            f(rng);
+#else
             try
             {
                 f(rng);
@@ -68,6 +71,7 @@ void nx::detail::execute_fuzz_test(void (*f)(tg::rng&))
                 test->setReproduce(reproduce(seed));
                 return;
             }
+#endif
         }
         ++it;
 

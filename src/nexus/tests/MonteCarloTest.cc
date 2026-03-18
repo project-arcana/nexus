@@ -288,7 +288,7 @@ struct nx::MonteCarloTest::machine
             for (auto a : f->arg_types)
                 if (!values.get(a).can_safely_generate())
                 {
-                    RICH_LOG_ERROR("no way to generate type {}", a.name());
+                    RICH_LOG_ERROR("no way to generate type {}", cc::demangle(a.name()));
                     return false;
                 }
 

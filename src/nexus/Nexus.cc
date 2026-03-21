@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <thread>
 
@@ -63,6 +64,35 @@ cc::string colored_test_time_str(double time_ms)
     return s;
 }
 
+cc::string escape_xml(cc::string_view name)
+{
+    cc::string s;
+    for (auto c : name)
+    {
+        switch (c)
+        {
+        case '<':
+            s += "&lt;";
+            break;
+        case '>':
+            s += "&gt;";
+            break;
+        case '&':
+            s += "&amp;";
+            break;
+        case '"':
+            s += "&quot;";
+            break;
+        case '\'':
+            s += "&apos;";
+            break;
+        default:
+            s += c;
+        }
+    }
+    return s;
+}
+
 cc::string repr_string_for(cc::string prefix, nx::Test const& t)
 {
     cc::string repr;
@@ -88,6 +118,8 @@ namespace nx
 {
 void write_xml_results(cc::string filename);
 void write_xml_results_sentinel(cc::string filename);
+void write_catch2_discovery_xml(cc::vector<Test*> const& tests);
+void write_catch2_results_xml(cc::vector<Test*> const& tests);
 }
 
 nx::App* nx::detail::get_current_app() { return curr_app(); }
@@ -108,6 +140,15 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
 {
     mTestArgC = argc - 1;
     mTestArgV = argv + 1;
+
+    // Pre-scan: detect catch2 mode before processing positional args
+    // so filters appearing before --list-tests/--reporter are handled correctly
+    for (auto i = 1; i < argc; ++i)
+    {
+        auto s = cc::string_view(argv[i]);
+        if (s == "--list-tests" || s == "--reporter")
+            mCatch2Mode = true;
+    }
 
     for (auto i = 1; i < argc; ++i)
     {
@@ -149,11 +190,83 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
             }
         }
 
+        // Catch2 compat flags
+        if (s == "--list-tests")
+        {
+            mCatch2Mode = true;
+            mHasListTests = true;
+            continue;
+        }
+
+        if (s == "--reporter")
+        {
+            mCatch2Mode = true;
+            mHasXmlReporter = true;
+            if (i + 1 < argc)
+                ++i; // consume reporter value
+            continue;
+        }
+
+        if (s == "--verbosity" || s == "--durations")
+        {
+            if (i + 1 < argc)
+                ++i; // consume value
+            continue;
+        }
+
+        if (s == "-v")
+            continue;
+
         if (s.empty() || s[0] == '-')
             continue; //  TODO
 
-        mSpecificTests.push_back(s);
+        // positional arg: treat as test name filter
+        // in Catch2 mode: comma-split and unescape \[ -> [
+        if (mCatch2Mode)
+        {
+            // split on comma
+            auto remaining = s;
+            while (!remaining.empty())
+            {
+                auto comma = remaining.index_of(',');
+                cc::string filter;
+                if (comma == -1)
+                {
+                    filter = remaining;
+                    remaining = {};
+                }
+                else
+                {
+                    filter = remaining.subview(0, comma);
+                    remaining = remaining.subview(comma + 1);
+                }
+
+                // unescape \[ -> [
+                cc::string unescaped;
+                for (size_t j = 0; j < filter.size(); ++j)
+                {
+                    if (filter[j] == '\\' && j + 1 < filter.size() && filter[j + 1] == '[')
+                    {
+                        unescaped += '[';
+                        ++j;
+                    }
+                    else
+                        unescaped += filter[j];
+                }
+
+                // special-case catch2 filter semantics
+                if (unescaped == "[.]")
+                    mRunDisabledTests = true; // [.] = hidden/disabled tests tag
+                else if (unescaped != "*" && !unescaped.empty())
+                    mSpecificTests.push_back(cc::move(unescaped)); // * = all tests, skip filter
+            }
+        }
+        else
+        {
+            mSpecificTests.push_back(s);
+        }
     }
+
 }
 
 int nx::Nexus::run()
@@ -163,6 +276,8 @@ int nx::Nexus::run()
     if (mPrintHelp)
     {
         RICH_LOG("version %s", version);
+        // TestMate detects this line to identify the binary as Catch2-compatible
+        RICH_LOG("Compatible with Catch2 v3.11.0 in some args");
         RICH_LOG("");
         RICH_LOG("usage:");
         RICH_LOG(R"(  --help        shows this help)");
@@ -226,7 +341,7 @@ int nx::Nexus::run()
         t->mArgV = mTestArgV + 1;
         auto do_run = true;
 
-        if (!t->isEnabled())
+        if (!t->isEnabled() && !mRunDisabledTests)
             do_run = false;
 
         if (!t->mOptInGroups.empty())
@@ -244,8 +359,10 @@ int nx::Nexus::run()
         {
             do_run = false;
             for (auto const& s : mSpecificTests)
-                if (s == t->name())
+            {
+                if (mCatch2Mode ? cc::string_view(t->name()).contains(cc::string_view(s)) : (s == t->name()))
                     do_run = true;
+            }
         }
 
         if (!do_run)
@@ -279,6 +396,13 @@ int nx::Nexus::run()
         tests_to_run.push_back(t.get());
     }
 
+    // Catch2 discovery mode: list tests as XML and exit
+    if (mHasListTests && mHasXmlReporter)
+    {
+        nx::write_catch2_discovery_xml(tests_to_run);
+        return EXIT_SUCCESS;
+    }
+
     RICH_LOG("version %s", version);
     RICH_LOG("run with '--help' for options");
     RICH_LOG("detected %s %s", tests.size(), tests.size() == 1 ? "test" : "tests");
@@ -300,6 +424,7 @@ int nx::Nexus::run()
         curr_test() = t;
         detail::is_silenced() = t->mShouldFail;
         detail::always_terminate() = false;
+        t->clearFailedChecks();
 
         auto const timestamp = current_timestamp();
         t->mFunctionBefore();
@@ -379,6 +504,10 @@ int nx::Nexus::run()
             nx::write_xml_results(mXmlOutputFile);
     };
 
+    // Catch2 results mode: emit <TestRun> XML to stdout
+    if (mHasXmlReporter && !mHasListTests)
+        nx::write_catch2_results_xml(tests_to_run);
+
     if (tests.empty())
     {
         RICH_LOG_WARN("no tests found/selected");
@@ -453,36 +582,6 @@ void nx::write_xml_results(cc::string filename)
         total_time += t->executionTimeInSec();
     }
 
-    auto escapeXmlString = [](cc::string name) -> cc::string
-    {
-        cc::string s;
-        for (auto c : name)
-        {
-            switch (c)
-            {
-            case '<':
-                s += "&lt;";
-                break;
-            case '>':
-                s += "&gt;";
-                break;
-            case '&':
-                s += "&amp;";
-                break;
-            case '"':
-                s += "&quot;";
-                break;
-            case '\'':
-                s += "&apos;";
-                break;
-
-            default:
-                s += c;
-            }
-        }
-        return s;
-    };
-
     xml += R"(<?xml version="1.0" encoding="UTF-8"?>)";
     xml += cc::format(R"(<testsuites name="Test run" tests="%s" failures="%s" errors="%s" skipped="%s" assertions="%s" time="%.5f" timestamp="%s">)",
                       total_tests, total_failures, 0, total_skipped, total_assertions, total_time, timestamp);
@@ -490,15 +589,15 @@ void nx::write_xml_results(cc::string filename)
                       total_tests, total_failures, 0, total_skipped, total_assertions, total_time, timestamp);
     for (auto const& t : tests)
     {
-        xml += cc::format(R"(<testcase name="%s" assertions="%s" time="%.5f" file="%s" line="%s">)", escapeXmlString(t->name()), t->numberOfChecks(),
-                          t->executionTimeInSec(), escapeXmlString(t->file()), t->line());
+        xml += cc::format(R"(<testcase name="%s" assertions="%s" time="%.5f" file="%s" line="%s">)", escape_xml(t->name()), t->numberOfChecks(),
+                          t->executionTimeInSec(), escape_xml(t->file()), t->line());
         if (!t->isEnabled())
         {
             xml += R"(<skipped message="Test is disabled" />)";
         }
         else if (t->didFail() && !t->shouldFail())
         {
-            xml += cc::format(R"(<failure message="%s">%s</failure>)", escapeXmlString(t->makeFirstFailMessage()), escapeXmlString(t->makeFirstFailInfo()));
+            xml += cc::format(R"(<failure message="%s">%s</failure>)", escape_xml(t->makeFirstFailMessage()), escape_xml(t->makeFirstFailInfo()));
         }
         else if (!t->didFail() && t->shouldFail())
         {
@@ -530,4 +629,60 @@ void nx::write_xml_results_sentinel(cc::string filename)
     xml += R"(</testsuites>)";
 
     std::ofstream(filename.c_str()) << xml.c_str();
+}
+
+void nx::write_catch2_discovery_xml(cc::vector<Test*> const& tests)
+{
+    cc::string xml;
+    xml += R"(<?xml version="1.0" encoding="UTF-8"?>)";
+    xml += "\n<MatchingTests>\n";
+    for (auto const* t : tests)
+    {
+        xml += "  <TestCase>\n";
+        xml += cc::format("    <Name>%s</Name>\n", escape_xml(t->name()));
+        xml += "    <ClassName/>\n";
+        xml += cc::format("    <Tags>%s</Tags>\n", t->isEnabled() ? "" : "[.]");
+        xml += "    <SourceInfo>\n";
+        xml += cc::format("      <File>%s</File>\n", escape_xml(t->file()));
+        xml += cc::format("      <Line>%s</Line>\n", t->line());
+        xml += "    </SourceInfo>\n";
+        xml += "  </TestCase>\n";
+    }
+    xml += "</MatchingTests>\n";
+    std::cout << xml.c_str();
+}
+
+void nx::write_catch2_results_xml(cc::vector<Test*> const& tests)
+{
+    cc::string xml;
+    xml += R"(<?xml version="1.0" encoding="UTF-8"?>)";
+    xml += "\n<TestRun>\n";
+    for (auto const* t : tests)
+    {
+        xml += cc::format(R"(  <TestCase name="%s" filename="%s" line="%s">)", escape_xml(t->name()), escape_xml(t->file()), t->line());
+        xml += "\n";
+
+        if (!t->isEnabled())
+        {
+            xml += "    <Skipped/>\n";
+        }
+        else
+        {
+            for (auto const& fc : t->failedChecks())
+            {
+                xml += cc::format(R"(    <Expression success="false" filename="%s" line="%s">)", escape_xml(fc.file), fc.line);
+                xml += "\n";
+                xml += cc::format("      <Original>%s</Original>\n", escape_xml(fc.original));
+                xml += cc::format("      <Expanded>%s</Expanded>\n", escape_xml(fc.expanded));
+                xml += "    </Expression>\n";
+            }
+
+            auto const success = !t->didFail();
+            xml += cc::format(R"(    <OverallResult success="%s" durationInSeconds="%.7f"/>)", success ? "true" : "false", t->executionTimeInSec());
+            xml += "\n";
+        }
+        xml += "  </TestCase>\n";
+    }
+    xml += "</TestRun>\n";
+    std::cout << xml.c_str();
 }

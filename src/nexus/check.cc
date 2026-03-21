@@ -15,6 +15,15 @@ bool nx::detail::report_failed_check(nx::detail::check_result const& r, const ch
 
     t->setFirstFailInfo(check, file, line, function);
 
+    {
+        cc::string expanded;
+        if (r.op)
+            expanded = r.lhs + " " + r.op + " " + r.rhs;
+        else
+            expanded = r.lhs;
+        t->addFailedCheck(check, cc::move(expanded), file, line);
+    }
+
     // log if not silenced
     if (!nx::detail::is_silenced())
     {

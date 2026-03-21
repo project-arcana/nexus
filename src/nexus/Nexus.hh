@@ -19,6 +19,10 @@ private:
     bool mPrintHelp = false;
     bool mForceEndless = false;
     bool mNoEndless = false;
+    bool mCatch2Mode = false;      // true when any Catch2 compat flag is present
+    bool mHasListTests = false;    // --list-tests was passed
+    bool mHasXmlReporter = false;  // --reporter was passed
+    bool mRunDisabledTests = false; // run disabled tests when explicitly targeted
     cc::string mForceReproduction;
     cc::string mXmlOutputFile;
     int mTestArgC = 0;

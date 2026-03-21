@@ -2,6 +2,7 @@
 
 #include <nexus/fwd.hh>
 
+#include <clean-core/span.hh>
 #include <clean-core/string.hh>
 #include <clean-core/vector.hh>
 
@@ -44,6 +45,18 @@ public:
 
     int numberOfChecks() const { return mCounters->num_checks; }
     int numberOfFailedChecks() const { return mCounters->num_failed_checks; }
+
+    struct FailedCheckInfo
+    {
+        cc::string original; // raw CHECK(...) expression
+        cc::string expanded; // "lhs op rhs" or just "lhs" for boolean checks
+        cc::string file;
+        int line = 0;
+    };
+
+    void addFailedCheck(cc::string original, cc::string expanded, cc::string file, int line);
+    void clearFailedChecks();
+    cc::span<FailedCheckInfo const> failedChecks() const { return mFailedChecks; }
 
     double executionTimeInSec() const { return mExecutionTimeInSec; }
     cc::string const& executionTimestamp() const { return mExecutionTimestamp; }
@@ -135,6 +148,8 @@ private:
     cc::vector<cc::string> mAfterPatterns;
     cc::vector<cc::string> mBeforePatterns;
     cc::vector<cc::string> mOptInGroups;
+
+    cc::vector<FailedCheckInfo> mFailedChecks;
 
     friend class Nexus;
     friend class MonteCarloTest;

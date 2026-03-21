@@ -41,3 +41,18 @@ cc::string nx::Test::makeFirstFailMessage() const
         return "unknown check failed. probably an assertion.";
     return mFirstFailMessage;
 }
+
+void nx::Test::addFailedCheck(cc::string original, cc::string expanded, cc::string file, int line)
+{
+    if (mFailedChecks.size() < 50)
+        mFailedChecks.push_back({cc::move(original), cc::move(expanded), cc::move(file), line});
+}
+
+void nx::Test::clearFailedChecks()
+{
+    mFailedChecks.clear();
+    mFirstFailMessage = {};
+    mFirstFailFile = {};
+    mFirstFailFunction = {};
+    mFirstFailLine = 0;
+}

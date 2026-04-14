@@ -157,6 +157,9 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
         if (i == 1 && (s == "--help" || s == "-h"))
             mPrintHelp = true;
 
+        if (s == "--verbose" || s == "-v")
+            mVerbose = true;
+
         if (s == "--endless")
             mForceEndless = true;
 
@@ -214,7 +217,7 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
             continue;
         }
 
-        if (s == "-v")
+        if (s == "-v") // already handled above
             continue;
 
         if (s.empty() || s[0] == '-')
@@ -266,7 +269,6 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
             mSpecificTests.push_back(s);
         }
     }
-
 }
 
 int nx::Nexus::run()
@@ -281,6 +283,7 @@ int nx::Nexus::run()
         RICH_LOG("");
         RICH_LOG("usage:");
         RICH_LOG(R"(  --help        shows this help)");
+        RICH_LOG(R"(  --verbose/-v  prints a header/footer around each test (useful for debugging hangs))");
         RICH_LOG(R"(  --endless     runs fuzz and mct tests in endless mode)");
         RICH_LOG(R"(  --no-endless  errors if any test would be run in endless mode (useful for CI))");
         RICH_LOG(R"(  --repr s      runs a test reproduction (i.e. similar to reproduce(s)))");
@@ -427,6 +430,10 @@ int nx::Nexus::run()
         t->clearFailedChecks();
 
         auto const timestamp = current_timestamp();
+
+        if (mVerbose)
+            RICH_LOG("[running \"%s\" %s:%s]", t->name(), t->file(), t->line());
+
         t->mFunctionBefore();
 
         // execute and measure
@@ -488,8 +495,17 @@ int nx::Nexus::run()
         total_time_ms += test_time_ms;
         t->setExecutionTime(timestamp, test_time_ms / 1000);
 
-        RICH_LOG("  %<60s " SCOL_GRAY "... " SCOL_RESET "%7d" SCOL_GRAY " checks in %s", //
-                 t->name(), num_checks, colored_test_time_str(test_time_ms));
+        if (mVerbose)
+        {
+            auto const failed = (t->didFail() != t->shouldFail());
+            RICH_LOG("[%s in %s (%d %s)]", failed ? "FAILED" : "success", colored_test_time_str(test_time_ms), num_checks, num_checks == 1 ? "check" : "checks");
+            RICH_LOG("");
+        }
+        else
+        {
+            RICH_LOG("  %<60s " SCOL_GRAY "... " SCOL_RESET "%7d" SCOL_GRAY " checks in %s", //
+                     t->name(), num_checks, colored_test_time_str(test_time_ms));
+        }
     }
 
     RICH_LOG("==============================================================================");

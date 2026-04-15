@@ -6,6 +6,7 @@
 #include <clean-core/string.hh>
 #include <clean-core/vector.hh>
 
+#include <nexus/check.hh>
 #include <nexus/config.hh>
 
 namespace nx
@@ -22,29 +23,29 @@ class Test
 {
     // properties
 public:
-    char const* name() const { return mName; }
-    char const* file() const { return mFile; }
-    int line() const { return mLine; }
-    char const* functionName() const { return mFunctionName; }
-    test_fun_t function() const { return mFunction; }
-    int argc() const { return mArgC; }
-    char const* const* argv() const { return mArgV; }
-    cc::span<char const* const> argSpan() const { return {mArgV, size_t(mArgC)}; }
+    [[nodiscard]] char const* name() const { return mName; }
+    [[nodiscard]] char const* file() const { return mFile; }
+    [[nodiscard]] int line() const { return mLine; }
+    [[nodiscard]] char const* functionName() const { return mFunctionName; }
+    [[nodiscard]] test_fun_t function() const { return mFunction; }
+    [[nodiscard]] int argc() const { return mArgC; }
+    [[nodiscard]] char const* const* argv() const { return mArgV; }
+    [[nodiscard]] cc::span<char const* const> argSpan() const { return {mArgV, size_t(mArgC)}; }
 
-    size_t seed() const { return mSeed; }
-    bool isExclusive() const { return mIsExclusive; }
-    bool shouldFail() const { return mShouldFail; }
-    bool isEndless() const { return mIsEndless; }
-    bool shouldReproduce() const { return mReproduction.valid; }
-    reproduce reproduction() const { return mReproduction; }
-    bool isEnabled() const { return mIsEnabled; }
-    bool isDebug() const { return mIsDebug; }
-    bool isVerbose() const { return mIsVerbose; }
+    [[nodiscard]] size_t seed() const { return mSeed; }
+    [[nodiscard]] bool isExclusive() const { return mIsExclusive; }
+    [[nodiscard]] bool shouldFail() const { return mShouldFail; }
+    [[nodiscard]] bool isEndless() const { return mIsEndless; }
+    [[nodiscard]] bool shouldReproduce() const { return mReproduction.valid; }
+    [[nodiscard]] reproduce reproduction() const { return mReproduction; }
+    [[nodiscard]] bool isEnabled() const { return mIsEnabled; }
+    [[nodiscard]] bool isDebug() const { return mIsDebug; }
+    [[nodiscard]] bool isVerbose() const { return mIsVerbose; }
 
-    bool didFail() const { return mDidFail; }
+    [[nodiscard]] bool didFail() const { return mDidFail; }
 
-    int numberOfChecks() const { return mCounters->num_checks; }
-    int numberOfFailedChecks() const { return mCounters->num_failed_checks; }
+    [[nodiscard]] int numberOfChecks() const { return mCounters->num_checks; }
+    [[nodiscard]] int numberOfFailedChecks() const { return mCounters->num_failed_checks; }
 
     struct FailedCheckInfo
     {
@@ -56,10 +57,10 @@ public:
 
     void addFailedCheck(cc::string original, cc::string expanded, cc::string file, int line);
     void clearFailedChecks();
-    cc::span<FailedCheckInfo const> failedChecks() const { return mFailedChecks; }
+    [[nodiscard]] cc::span<FailedCheckInfo const> failedChecks() const { return mFailedChecks; }
 
-    double executionTimeInSec() const { return mExecutionTimeInSec; }
-    cc::string const& executionTimestamp() const { return mExecutionTimestamp; }
+    [[nodiscard]] double executionTimeInSec() const { return mExecutionTimeInSec; }
+    [[nodiscard]] cc::string const& executionTimestamp() const { return mExecutionTimestamp; }
 
     // methods
 public:

@@ -24,13 +24,12 @@
 #include <rich-log/log.hh>
 #include <rich-log/logger.hh>
 
-#define SCOL_GRAY "\u001b[38;5;244m"
-#define SCOL_ORANGE "\u001b[38;5;220m"
-#define SCOL_RED "\u001b[38;5;196m"
-#define SCOL_RESET "\u001b[0m"
-
 namespace
 {
+char const* scol_gray() { return rlog::colors_enabled() ? "\u001b[38;5;244m" : ""; }
+char const* scol_orange() { return rlog::colors_enabled() ? "\u001b[38;5;220m" : ""; }
+char const* scol_red() { return rlog::colors_enabled() ? "\u001b[38;5;196m" : ""; }
+char const* scol_reset() { return rlog::colors_enabled() ? "\u001b[0m" : ""; }
 nx::App*& curr_app()
 {
     thread_local static nx::App* a = nullptr;
@@ -55,13 +54,13 @@ cc::string colored_test_time_str(double time_ms)
 {
     auto s = cc::format("%7.2f ms", time_ms);
     if (time_ms < 10)
-        s = SCOL_GRAY + s + SCOL_RESET;
+        s = scol_gray() + s + scol_reset();
     else if (time_ms < 100)
-        s = SCOL_RESET + s;
+        s = scol_reset() + s;
     else if (time_ms < 1000)
-        s = SCOL_ORANGE + s + SCOL_RESET;
+        s = scol_orange() + s + scol_reset();
     else
-        s = SCOL_RED + s + SCOL_RESET;
+        s = scol_red() + s + scol_reset();
     return s;
 }
 
@@ -564,8 +563,8 @@ int nx::Nexus::run()
         }
         else
         {
-            RICH_LOG("  %<60s " SCOL_GRAY "... " SCOL_RESET "%7d" SCOL_GRAY " checks in %s", //
-                     t->name(), num_checks, colored_test_time_str(test_time_ms));
+            RICH_LOG("  %<60s %s... %s%7d%s checks in %s", //
+                     t->name(), scol_gray(), scol_reset(), num_checks, scol_gray(), colored_test_time_str(test_time_ms));
         }
     }
 

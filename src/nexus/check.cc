@@ -8,6 +8,8 @@
 #include <clean-core/assert.hh>
 #include <clean-core/string_view.hh>
 
+#include <rich-log/logger.hh>
+
 bool nx::detail::report_failed_check(nx::detail::check_result const& r, const char* check, const char* file, int line, char const* function, bool terminate)
 {
     auto t = nx::detail::get_current_test();
@@ -55,12 +57,12 @@ bool nx::detail::report_failed_check(nx::detail::check_result const& r, const ch
                 auto rhs_mid = cc::string(rhs.subview(s_start, rhs.size() - s_start - s_end));
                 auto rhs_end = cc::string(rhs.subview(rhs.size() - s_end));
 
-#define CHECK_COLOR_RESET "\u001b[0m"
-#define CHECK_COLOR_GRAY "\u001b[38;5;244m"
-                std::cerr << "  lhs: " CHECK_COLOR_GRAY << lhs_pre.c_str() << CHECK_COLOR_RESET << lhs_mid.c_str() << CHECK_COLOR_GRAY
-                          << lhs_end.c_str() << CHECK_COLOR_RESET << std::endl;
-                std::cerr << "  rhs: " CHECK_COLOR_GRAY << rhs_pre.c_str() << CHECK_COLOR_RESET << rhs_mid.c_str() << CHECK_COLOR_GRAY
-                          << rhs_end.c_str() << CHECK_COLOR_RESET << std::endl;
+                auto const col_reset = rlog::colors_enabled() ? "\u001b[0m" : "";
+                auto const col_gray = rlog::colors_enabled() ? "\u001b[38;5;244m" : "";
+                std::cerr << "  lhs: " << col_gray << lhs_pre.c_str() << col_reset << lhs_mid.c_str() << col_gray
+                          << lhs_end.c_str() << col_reset << std::endl;
+                std::cerr << "  rhs: " << col_gray << rhs_pre.c_str() << col_reset << rhs_mid.c_str() << col_gray
+                          << rhs_end.c_str() << col_reset << std::endl;
 
                 if (lhs == rhs)
                     std::cout << "  (NOTE: lhs and rhs string representation is identical, but 'lhs == rhs' still evaluates to 'false')" << std::endl;

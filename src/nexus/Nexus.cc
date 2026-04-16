@@ -22,6 +22,7 @@
 #include <thread>
 
 #include <rich-log/log.hh>
+#include <rich-log/logger.hh>
 
 #define SCOL_GRAY "\u001b[38;5;244m"
 #define SCOL_ORANGE "\u001b[38;5;220m"
@@ -91,6 +92,35 @@ cc::string escape_xml(cc::string_view name)
         }
     }
     return s;
+}
+
+cc::string escape_json(cc::string_view s)
+{
+    cc::string out;
+    for (auto c : s)
+    {
+        switch (c)
+        {
+        case '"':
+            out += "\\\"";
+            break;
+        case '\\':
+            out += "\\\\";
+            break;
+        case '\n':
+            out += "\\n";
+            break;
+        case '\r':
+            out += "\\r";
+            break;
+        case '\t':
+            out += "\\t";
+            break;
+        default:
+            out += c;
+        }
+    }
+    return out;
 }
 
 cc::string repr_string_for(cc::string prefix, nx::Test const& t)
@@ -193,6 +223,12 @@ void nx::Nexus::applyCmdArgs(int argc, char** argv)
             }
         }
 
+        if (s == "--list-json")
+        {
+            mListJson = true;
+            continue;
+        }
+
         // Catch2 compat flags
         if (s == "--list-tests")
         {
@@ -288,12 +324,37 @@ int nx::Nexus::run()
         RICH_LOG(R"(  --no-endless  errors if any test would be run in endless mode (useful for CI))");
         RICH_LOG(R"(  --repr s      runs a test reproduction (i.e. similar to reproduce(s)))");
         RICH_LOG(R"(  --xml file    writes the test results into the given file in JUnit xml style)");
+        RICH_LOG(R"(  --list-json   lists all tests as JSON to stdout and exits)");
         RICH_LOG(R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
         RICH_LOG("");
         RICH_LOG("stats:");
         RICH_LOG(" - found %s tests", detail::get_all_tests().size());
         RICH_LOG(" - found %s apps", detail::get_all_apps().size());
 
+        return EXIT_SUCCESS;
+    }
+
+    // JSON discovery mode: list ALL registered tests with metadata as JSON and exit
+    if (mListJson)
+    {
+        auto const& all_tests = detail::get_all_tests();
+        cc::string json;
+        json += "[\n";
+        for (size_t i = 0; i < all_tests.size(); ++i)
+        {
+            auto const* t = all_tests[i].get();
+            json += "  {\n";
+            json += cc::format("    \"name\": \"%s\",\n", escape_json(t->name()));
+            json += cc::format("    \"file\": \"%s\",\n", escape_json(t->file()));
+            json += cc::format("    \"line\": %s,\n", t->line());
+            json += cc::format("    \"enabled\": %s,\n", t->isEnabled() ? "true" : "false");
+            json += cc::format("    \"exclusive\": %s,\n", t->isExclusive() ? "true" : "false");
+            json += cc::format("    \"should_fail\": %s,\n", t->shouldFail() ? "true" : "false");
+            json += cc::format("    \"endless\": %s\n", t->isEndless() ? "true" : "false");
+            json += i + 1 < all_tests.size() ? "  },\n" : "  }\n";
+        }
+        json += "]\n";
+        std::cout << json.c_str();
         return EXIT_SUCCESS;
     }
 

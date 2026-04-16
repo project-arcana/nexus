@@ -22,6 +22,7 @@ private:
     bool mCatch2Mode = false;      // true when any Catch2 compat flag is present
     bool mHasListTests = false;    // --list-tests was passed
     bool mHasXmlReporter = false;  // --reporter was passed
+    bool mListJson = false;        // --list-json was passed
     bool mVerbose = false;
     bool mRunDisabledTests = false; // run disabled tests when explicitly targeted
     cc::string mForceReproduction;

@@ -34,7 +34,7 @@
     do                                                                                                                 \
     {                                                                                                                  \
         ::nx::detail::number_of_assertions()++;                                                                        \
-        ::nx::detail::check_result _nx_impl_r = ::nx::detail::start_check{} < __VA_ARGS__;                             \
+        const ::nx::detail::check_result _nx_impl_r = ::nx::detail::start_check{} < __VA_ARGS__;                       \
         if (!_nx_impl_r.is_true)                                                                                       \
         {                                                                                                              \
             ::nx::detail::number_of_failed_assertions()++;                                                             \

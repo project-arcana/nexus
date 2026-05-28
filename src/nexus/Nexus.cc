@@ -41,6 +41,67 @@ nx::Test*& curr_test()
     return t;
 }
 
+// matches `name` against a user-supplied `pattern`.
+// - a pattern without '*' matches as a substring (so "foo" matches "foobar")
+// - '*' matches any run of characters (including empty); a leading/trailing '*'
+//   relaxes the start/end anchor, and interior segments must occur in order
+//   (so "a*c" matches "abc" and "ac" but not "ca").
+bool name_matches(cc::string_view pattern, cc::string_view name)
+{
+    // default / fast path: no wildcard -> substring match
+    if (!pattern.contains('*'))
+        return name.contains(pattern);
+
+    bool const anchored_start = !pattern.starts_with('*');
+    bool const anchored_end = !pattern.ends_with('*');
+
+    // walk the '*'-separated segments left to right, consuming `name` via cursor
+    size_t cursor = 0;
+    bool first_segment = true;
+    size_t seg_begin = 0;
+    while (seg_begin <= pattern.size())
+    {
+        auto const rest = pattern.subview(seg_begin);
+        int64_t const star_rel = rest.index_of('*'); // -1 if no more '*'
+        bool const last_segment = star_rel < 0;
+        size_t const seg_len = last_segment ? rest.size() : size_t(star_rel);
+        auto const seg = rest.subview(0, seg_len);
+
+        // empty segments (leading/trailing/double '*') impose no constraint
+        if (!seg.empty())
+        {
+            if (first_segment && anchored_start)
+            {
+                // first segment must match at the very start
+                if (!name.starts_with(seg))
+                    return false;
+                cursor = seg.size();
+            }
+            else if (last_segment && anchored_end)
+            {
+                // last segment must match at the very end, after the cursor
+                if (cursor + seg.size() > name.size() || !name.ends_with(seg))
+                    return false;
+                cursor = name.size();
+            }
+            else
+            {
+                // floating segment: must occur somewhere at or after the cursor
+                int64_t const at = name.subview(cursor).index_of(seg);
+                if (at < 0)
+                    return false;
+                cursor += size_t(at) + seg.size();
+            }
+        }
+
+        first_segment = false;
+        if (last_segment)
+            break;
+        seg_begin += seg_len + 1; // skip the '*'
+    }
+    return true;
+}
+
 cc::string to_timestamp(std::chrono::system_clock::time_point t)
 {
     auto itt = std::chrono::system_clock::to_time_t(t);
@@ -324,7 +385,9 @@ int nx::Nexus::run()
         RICH_LOG(R"(  --repr s      runs a test reproduction (i.e. similar to reproduce(s)))");
         RICH_LOG(R"(  --xml file    writes the test results into the given file in JUnit xml style)");
         RICH_LOG(R"(  --list-json   lists all tests as JSON to stdout and exits)");
-        RICH_LOG(R"(  "test name"   runs all tests named "test name" (quotation marks optional if no space in name))");
+        RICH_LOG(R"(  "test name"   runs tests whose name contains "test name" (substring match;)");
+        RICH_LOG(R"(                quotation marks optional if no space in name))");
+        RICH_LOG(R"(  "pat*tern"    runs tests matching a '*' wildcard, e.g. "split*" or "*comps*")");
         RICH_LOG("");
         RICH_LOG("stats:");
         RICH_LOG(" - found %s tests", detail::get_all_tests().size());
@@ -366,7 +429,7 @@ int nx::Nexus::run()
         if (!mSpecificTests.empty())
         {
             for (auto const& s : mSpecificTests)
-                if (s == app->name())
+                if (name_matches(s, app->name()))
                     do_run = true;
         }
 
@@ -420,10 +483,16 @@ int nx::Nexus::run()
         // AFTER opt-in groups, so you can still selectively run them
         if (!mSpecificTests.empty())
         {
+            // an exact name opts a test back in even if disabled / not in an
+            // enabled group; a fuzzy (substring/wildcard) match only narrows
+            // the set of tests that would already run, so it never resurrects
+            // a disabled or group-gated test.
+            bool const passed_gates = do_run;
             do_run = false;
             for (auto const& s : mSpecificTests)
             {
-                if (mCatch2Mode ? cc::string_view(t->name()).contains(cc::string_view(s)) : (s == t->name()))
+                // exact name always opts in; fuzzy match only narrows runnable tests
+                if (s == t->name() || (passed_gates && name_matches(s, t->name())))
                     do_run = true;
             }
         }

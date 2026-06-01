@@ -59,6 +59,16 @@ public:
     void clearFailedChecks();
     [[nodiscard]] cc::span<FailedCheckInfo const> failedChecks() const { return mFailedChecks; }
 
+    // raw stdout/stderr captured during this test's execution. only populated when
+    // an XML report is requested (see Nexus::run) and only retained for failing tests.
+    [[nodiscard]] cc::string const& capturedStdout() const { return mCapturedStdout; }
+    [[nodiscard]] cc::string const& capturedStderr() const { return mCapturedStderr; }
+    void setCapturedOutput(cc::string out, cc::string err)
+    {
+        mCapturedStdout = cc::move(out);
+        mCapturedStderr = cc::move(err);
+    }
+
     [[nodiscard]] double executionTimeInSec() const { return mExecutionTimeInSec; }
     [[nodiscard]] cc::string const& executionTimestamp() const { return mExecutionTimestamp; }
 
@@ -151,6 +161,9 @@ private:
     cc::vector<cc::string> mOptInGroups;
 
     cc::vector<FailedCheckInfo> mFailedChecks;
+
+    cc::string mCapturedStdout;
+    cc::string mCapturedStderr;
 
     friend class Nexus;
     friend class MonteCarloTest;

@@ -14,12 +14,20 @@
 #include <clean-core/unique_ptr.hh>
 
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <thread>
+
+#ifdef CC_OS_WINDOWS
+#include <fcntl.h>
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 #include <rich-log/log.hh>
 #include <rich-log/logger.hh>
@@ -40,6 +48,129 @@ nx::Test*& curr_test()
     thread_local static nx::Test* t = nullptr;
     return t;
 }
+
+// Tees a single file descriptor (stdout=1 or stderr=2) into an in-memory buffer
+// while still forwarding everything to the original destination, so the output is
+// both recorded for the XML report AND stays visible live (run.py mirrors/captures
+// it as usual). Implemented at the fd level so it catches C stdio, iostreams, rlog,
+// glow and the CHECK-failure diffs alike. Only constructed while an XML report is
+// requested; a default-constructed tee is inactive and a no-op.
+class fd_tee
+{
+    static constexpr size_t max_capture = size_t(256) * 1024; // bound the buffer; tests can be chatty
+
+public:
+    // when `enabled` is false the tee is inert: output flows normally and nothing
+    // is captured. this is the no-XML case (local runs without --xml).
+    fd_tee(bool enabled, int fd, cc::string& sink) : mFd(fd), mSink(&sink)
+    {
+        if (!enabled)
+            return;
+
+        // push out anything buffered for this fd before we splice in the pipe
+        flush_fd(fd);
+
+        int pipe_fds[2];
+#ifdef CC_OS_WINDOWS
+        if (_pipe(pipe_fds, 1 << 16, _O_BINARY) != 0)
+            return;
+        mSaved = _dup(fd);
+        _dup2(pipe_fds[1], fd);
+        _close(pipe_fds[1]);
+#else
+        if (::pipe(pipe_fds) != 0)
+            return;
+        mSaved = ::dup(fd);
+        ::dup2(pipe_fds[1], fd);
+        ::close(pipe_fds[1]);
+#endif
+        mReadFd = pipe_fds[0];
+        mActive = true;
+        mReader = std::thread([this] { pump(); });
+    }
+
+    ~fd_tee() { stop(); }
+
+    fd_tee(fd_tee const&) = delete;
+    fd_tee& operator=(fd_tee const&) = delete;
+
+    // restores the original fd, drains the pipe and joins the reader thread
+    void stop()
+    {
+        if (!mActive)
+            return;
+        mActive = false;
+
+        // flush the test's last writes, then restore the fd. closing the only remaining
+        // write end (the redirected fd itself) makes the reader observe EOF and exit.
+        // join the reader BEFORE closing mSaved: it mirrors through mSaved, and writing
+        // to a closed fd aborts the process via the CRT invalid-parameter handler on Windows.
+        flush_fd(mFd);
+#ifdef CC_OS_WINDOWS
+        _dup2(mSaved, mFd);
+        if (mReader.joinable())
+            mReader.join();
+        _close(mSaved);
+        _close(mReadFd);
+#else
+        ::dup2(mSaved, mFd);
+        if (mReader.joinable())
+            mReader.join();
+        ::close(mSaved);
+        ::close(mReadFd);
+#endif
+    }
+
+private:
+    // flush both the C stdio buffer and the matching C++ iostream for `fd` so all
+    // buffered output crosses the redirect boundary at the right moment.
+    static void flush_fd(int fd)
+    {
+        if (fd == 2)
+        {
+            std::fflush(stderr);
+            std::cerr.flush();
+        }
+        else
+        {
+            std::fflush(stdout);
+            std::cout.flush();
+        }
+    }
+
+    void pump()
+    {
+        char buf[4096];
+        while (true)
+        {
+#ifdef CC_OS_WINDOWS
+            int const n = _read(mReadFd, buf, sizeof(buf));
+#else
+            auto const n = ::read(mReadFd, buf, sizeof(buf));
+#endif
+            if (n <= 0)
+                break;
+
+            // mirror back to the real destination so the output stays visible
+#ifdef CC_OS_WINDOWS
+            _write(mSaved, buf, unsigned(n));
+#else
+            [[maybe_unused]] auto const w = ::write(mSaved, buf, size_t(n));
+#endif
+
+            // capture, bounded
+            if (mSink->size() < max_capture)
+                *mSink += cc::string_view(buf, size_t(n));
+        }
+    }
+
+    int mFd = -1;
+    int mSaved = -1;
+    int mReadFd = -1;
+    bool mActive = false;
+    cc::string* mSink = nullptr;
+    std::thread mReader;
+};
 
 // matches `name` against a user-supplied `pattern`.
 // - a pattern without '*' matches as a substring (so "foo" matches "foobar")
@@ -148,6 +279,11 @@ cc::string escape_xml(cc::string_view name)
             s += "&apos;";
             break;
         default:
+            // XML 1.0 forbids C0 control characters other than tab/newline/CR (and
+            // they cannot even be expressed as numeric refs). Drop them so captured
+            // raw output containing ANSI/control bytes still yields a valid document.
+            if (c >= 0 && c < 0x20 && c != '\t' && c != '\n' && c != '\r')
+                break;
             s += c;
         }
     }
@@ -550,6 +686,10 @@ int nx::Nexus::run()
     auto total_num_checks = 0;
     auto total_num_failed_checks = 0;
 
+    // capture each test's raw stdout/stderr only when we are going to write an XML
+    // report; the captured output is embedded into the report for failing tests.
+    bool const capture_output = !mXmlOutputFile.empty();
+
     for (auto* t : tests_to_run)
     {
         // prepare
@@ -566,18 +706,28 @@ int nx::Nexus::run()
         t->mFunctionBefore();
 
         // execute and measure
+        cc::string captured_out;
+        cc::string captured_err;
         auto const start = std::chrono::high_resolution_clock::now();
-        if (t->isDebug() || t->shouldReproduce())
-            t->function()();
-        else
         {
-            try
-            {
+            // tee stdout/stderr into buffers (still mirrored to the console) while the
+            // test runs, so a failing test's output can be embedded into the XML report.
+            // only active while writing an XML report; inert no-ops otherwise.
+            fd_tee const tee_out(capture_output, 1, captured_out);
+            fd_tee const tee_err(capture_output, 2, captured_err);
+
+            if (t->isDebug() || t->shouldReproduce())
                 t->function()();
-            }
-            catch (nx::detail::assertion_failed_exception const&)
+            else
             {
-                // empty by design
+                try
+                {
+                    t->function()();
+                }
+                catch (nx::detail::assertion_failed_exception const&)
+                {
+                    // empty by design
+                }
             }
         }
         auto const end = std::chrono::high_resolution_clock::now();
@@ -593,6 +743,11 @@ int nx::Nexus::run()
         total_num_checks += num_checks;
 
         t->setDidFail(num_failed_checks > 0);
+
+        // keep the captured output only for genuinely failing tests; that is all the
+        // XML report embeds, and retaining it for every test would waste memory.
+        if (capture_output && t->didFail() && !t->shouldFail())
+            t->setCapturedOutput(cc::move(captured_out), cc::move(captured_err));
 
         if (t->mShouldFail)
         {
@@ -742,12 +897,30 @@ void nx::write_xml_results(cc::string filename)
         }
         else if (t->didFail() && !t->shouldFail())
         {
-            xml += cc::format(R"(<failure message="%s">%s</failure>)", escape_xml(t->makeFirstFailMessage()), escape_xml(t->makeFirstFailInfo()));
+            // enrich the failure body beyond the bare assertion: the seed (so a randomized
+            // failure can be reproduced), the reproduction command if one was recorded, and
+            // every failed check with its expanded lhs/rhs values. assembled as plain text
+            // and escaped once at the end.
+            cc::string body = t->makeFirstFailInfo();
+            body += cc::format("\nseed: %s", t->seed());
+            body += repr_string_for("\n", *t); // "reproduce via TEST(..., reproduce(...))" or empty
+            if (!t->failedChecks().empty())
+            {
+                body += "\nfailed checks:";
+                for (auto const& fc : t->failedChecks())
+                    body += cc::format("\n  - %s  =>  %s  (%s:%s)", fc.original, fc.expanded, fc.file, fc.line);
+            }
+            xml += cc::format(R"(<failure message="%s">%s</failure>)", escape_xml(t->makeFirstFailMessage()), escape_xml(body));
         }
         else if (!t->didFail() && t->shouldFail())
         {
             xml += R"(<failure message="Test did not fail but was marked as should_fail."></failure>)";
         }
+        // raw stdout/stderr captured during execution (failing tests only, see Nexus::run)
+        if (!t->capturedStdout().empty())
+            xml += cc::format(R"(<system-out>%s</system-out>)", escape_xml(t->capturedStdout()));
+        if (!t->capturedStderr().empty())
+            xml += cc::format(R"(<system-err>%s</system-err>)", escape_xml(t->capturedStderr()));
         xml += R"(</testcase>)";
     }
     xml += R"(</testsuite>)";

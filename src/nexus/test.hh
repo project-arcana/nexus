@@ -98,6 +98,7 @@ NX_API void configure(Test* t, seed const& v);
 NX_API void configure(Test* t, endless_t const&);
 NX_API void configure(Test* t, reproduce const& r);
 NX_API void configure(Test* t, disabled_t const&);
+NX_API void configure(Test* t, manual_t const&);
 NX_API void configure(Test* t, debug_t const&);
 NX_API void configure(Test* t, verbose_t const&);
 NX_API void configure(Test* t, opt_in_group const& g);

@@ -49,6 +49,11 @@ static constexpr struct disabled_t
 {
 } disabled;
 
+/// this test is only run manually (currently an alias for `disabled`)
+static constexpr struct manual_t
+{
+} manual;
+
 /// don't catch errors thrown (for debugging)
 static constexpr struct debug_t
 {

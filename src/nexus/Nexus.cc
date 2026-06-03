@@ -933,15 +933,33 @@ void nx::write_xml_results(cc::string filename)
 void nx::write_xml_results_sentinel(cc::string filename)
 {
     // see https://github.com/testmoapp/junitxml
+
+    // Derive the test binary's name from the output path so a hard-crash
+    // sentinel names the binary it crashed in (much easier to discover than a
+    // generic "Test run"). E.g. ".../solidean-memory-tests.exe.results.xml"
+    // -> "solidean-memory-tests".
+    cc::string_view base = filename;
+    auto const sep_fwd = base.last_index_of('/');
+    auto const sep_back = base.last_index_of('\\');
+    auto const sep = sep_fwd > sep_back ? sep_fwd : sep_back;
+    base = base.subview(size_t(sep + 1)); // sep == -1 when there is no separator
+    if (base.ends_with(".results.xml"))
+        base = base.subview(0, base.size() - cc::string_view(".results.xml").size());
+    if (base.ends_with(".exe"))
+        base = base.subview(0, base.size() - cc::string_view(".exe").size());
+    cc::string const suite = base.empty() ? cc::string("Test run") : cc::string(base);
+
+    auto const message = cc::format("Nexus did not run until real xml was written. This indicates a hard crash inside test binary '%s'.", suite);
+
     cc::string xml;
 
     auto const timestamp = current_timestamp();
 
     xml += R"(<?xml version="1.0" encoding="UTF-8"?>)";
-    xml += cc::format(R"(<testsuites name="Test run" tests="1" failures="0" errors="1" skipped="0" assertions="1" time="0.0" timestamp="%s">)", timestamp);
-    xml += cc::format(R"(<testsuite name="Test run" tests="1" failures="0" errors="1" skipped="0" assertions="1" time="0.0" timestamp="%s">)", timestamp);
+    xml += cc::format(R"(<testsuites name="%s" tests="1" failures="0" errors="1" skipped="0" assertions="1" time="0.0" timestamp="%s">)", escape_xml(suite), timestamp);
+    xml += cc::format(R"(<testsuite name="%s" tests="1" failures="0" errors="1" skipped="0" assertions="1" time="0.0" timestamp="%s">)", escape_xml(suite), timestamp);
     xml += R"(<testcase name="Dummy Test Case" assertions="1" time="0" file="does-not-exist.cc" line="1">)";
-    xml += R"(<failure message="Nexus did not run until real xml was written. This indicates a hard crash inside the test framework."></failure>)";
+    xml += cc::format(R"(<failure message="%s"></failure>)", escape_xml(message));
     xml += R"(</testcase>)";
     xml += R"(</testsuite>)";
     xml += R"(</testsuites>)";
